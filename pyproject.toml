@@ -1,0 +1,15 @@
+[project]
+name = "claude-for-mac-local"
+version = "0.1.0"
+description = "Experimental LLM agent response tests for local-mac skills"
+requires-python = ">=3.9"
+
+[project.optional-dependencies]
+test = [
+    "deepeval>=1.0.0",
+    "pytest>=7.0.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
