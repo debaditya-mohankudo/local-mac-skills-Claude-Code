@@ -7,25 +7,29 @@
 
 ## Pre-Commit Guardrail: Check for Personal Data
 
-**Before every commit, scan for personal data patterns:**
+**Use the automated scanning tool:**
 
 ```bash
-# Check for phone numbers (Indian format: +91XXXXXXXXXX or 10-digit)
-grep -r '\+91[0-9]\{10\}\|[0-9]\{10\}' --include="*.md" --include="*.sh" --include="*.py" .
+# Scan entire codebase for personal data patterns
+./tools/scan_personal_data.sh
 
-# Check for common email patterns (not placeholder emails)
-grep -rE '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}' --include="*.md" --include="*.sh" . | grep -v 'example.com'
-
-# Check for IP addresses (not placeholder ranges like 192.168.x.x)
-grep -rE '\b([0-9]{1,3}\.){3}[0-9]{1,3}\b' --include="*.md" --include="*.sh" . | grep -v '192.168\|172.16\|10.0'
-
-# Check for API keys / tokens (common patterns)
-grep -rE '(api[_-]?key|secret|token|password)\s*[=:]\s*["\'][^"\']{10,}' --include="*.sh" --include="*.py" . | grep -v 'PLACEHOLDER\|EXAMPLE\|XXXXXXXXXX'
+# Scan specific directory
+./tools/scan_personal_data.sh ./src
 ```
 
-**Or use this quick check before committing:**
+The tool checks for:
+
+- **Phone numbers** — Indian format (+91XXXXXXXXXX)
+- **Email addresses** — non-placeholder patterns
+- **IP addresses** — non-private ranges
+- **API keys/tokens** — common exposure patterns
+
+Exits with code 0 if clean, 1 if issues found.
+
+**Manual quick check (if needed):**
+
 ```bash
-git diff --cached | grep -E '\+91[0-9]{10}|[^x][0-9]{10}|@[a-z]+\.[a-z]+' && echo "⚠️  Personal data found in staged changes!" || echo "✓ No obvious personal data detected"
+git diff --cached | grep -E '\+91[0-9]{10}|[^x][0-9]{10}|@[a-z]+\.[a-z]+' && echo "⚠️  Personal data found!" || echo "✓ No obvious personal data detected"
 ```
 
 If personal data is found, **do not commit**. Replace with placeholders first.
