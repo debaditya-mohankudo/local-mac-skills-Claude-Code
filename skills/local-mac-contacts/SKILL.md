@@ -25,7 +25,7 @@ Present results as a table:
 ```
 | Name | Label | Number |
 |------|-------|--------|
-| Simran | Mobile | +917766554433 |
+| Simran | Mobile | +91XXXXXXXXXX |
 ```
 
 - Clean up label formatting: `_$!<Mobile>!$_` → `Mobile`, `_$!<Main>!$_` → `Main`, `_$!<Home>!$_` → `Home`, `_$!<Work>!$_` → `Work`

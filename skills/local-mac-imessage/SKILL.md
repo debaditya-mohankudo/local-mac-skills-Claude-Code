@@ -9,7 +9,7 @@ Send iMessages on macOS via AppleScript (osascript).
 ## How to use this skill
 
 When invoked directly (e.g. `/local-mac-imessage`), ask the user for:
-1. **Recipient** — phone number (e.g. `+919988776655`) or Apple ID email
+1. **Recipient** — phone number (e.g. `+91XXXXXXXXXX`) or Apple ID email
 2. **Message** — the text to send
 
 If the user has already provided the recipient and/or message in the same request, skip asking for what was already provided.
@@ -32,7 +32,7 @@ ALLOWED_PHONE_NUMBERS=+91XXXXXXXXXX,+91XXXXXXXXXX,user@example.com
 
 **Example:** If `ALLOWED_PHONE_NUMBERS=+91XXXXXXXXXX`, attempting to send to any other number will fail with:
 ```
-Error: Recipient '+919988776655' is not in ALLOWED_PHONE_NUMBERS
+Error: Recipient '+91XXXXXXXXXX' is not in ALLOWED_PHONE_NUMBERS
 ```
 
 ## Sending a message
@@ -57,9 +57,9 @@ To schedule a message to be sent after a delay:
 - The send runs entirely in the background — the script returns immediately
 - After the delay expires, the message is sent automatically
 
-Example: Send "hi" to `+919988776655` after 5 minutes:
+Example: Send "hi" to `+91XXXXXXXXXX` after 5 minutes:
 ```bash
-~/workspace/claude_for_mac_local/tools/imessage_send.sh -y --delay 5 "+919988776655" "hi"
+~/workspace/claude_for_mac_local/tools/imessage_send.sh -y --delay 5 "+91XXXXXXXXXX" "hi"
 ```
 
 **After starting a delayed send**, confirm to the user: `Scheduled: "MESSAGE_TEXT" → RECIPIENT (in N minutes)`
@@ -75,7 +75,7 @@ Confirm to the user: `Sent: "MESSAGE_TEXT" → RECIPIENT`
 If the script errors (e.g. buddy not found, Messages not signed in), report the error clearly and suggest the user:
 - Verify the recipient is reachable via iMessage (not just SMS)
 - Ensure the Messages app is open and signed into iMessage
-- Try using the full international format for phone numbers (e.g. `+91+919988776655`)
+- Try using the full international format for phone numbers (e.g. `+91+91XXXXXXXXXX`)
 
 ## Checking recent iMessages
 
@@ -85,7 +85,7 @@ When the user asks to check/read/show iMessages received in the last N minutes (
 ~/workspace/claude_for_mac_local/tools/imessage_check.sh [MINUTES] [CONTACT]
 ```
 
-`CONTACT` can be a phone number (e.g. `+919988776655`) or contact name (e.g. `Simraan`).
+`CONTACT` can be a phone number (e.g. `+91XXXXXXXXXX`) or contact name (e.g. `Simraan`).
 
 ### Check all messages (last 30 minutes by default):
 ```bash
@@ -99,7 +99,7 @@ When the user asks to check/read/show iMessages received in the last N minutes (
 
 ### Check messages from a specific contact (optional):
 ```bash
-~/workspace/claude_for_mac_local/tools/imessage_check.sh 120 +919988776655
+~/workspace/claude_for_mac_local/tools/imessage_check.sh 120 +91XXXXXXXXXX
 ~/workspace/claude_for_mac_local/tools/imessage_check.sh 120 Simraan
 ```
 
@@ -109,7 +109,7 @@ Create or copy `.env` from `.env.example` and set `IMESSAGE_PHONE_NUMBER`:
 ```bash
 cp .env.example .env
 # Edit .env and set your default phone number
-# IMESSAGE_PHONE_NUMBER=+919988776655
+# IMESSAGE_PHONE_NUMBER=+91XXXXXXXXXX
 ```
 
 Then check messages from the default contact:
@@ -123,7 +123,7 @@ Show redacted preview (time and sender only), then ask user if ready to see full
 
 ```bash
 ~/workspace/claude_for_mac_local/tools/imessage_check.sh --preview 120
-~/workspace/claude_for_mac_local/tools/imessage_check.sh --preview 120 +917766554433
+~/workspace/claude_for_mac_local/tools/imessage_check.sh --preview 120 +91XXXXXXXXXX
 ```
 
 **Output with redaction:**
@@ -131,7 +131,7 @@ Show redacted preview (time and sender only), then ask user if ready to see full
 ```
 📋 Message Preview (Redacted):
 
-2026-03-21 10:42:15|+917766554433|[REDACTED]
+2026-03-21 10:42:15|+91XXXXXXXXXX|[REDACTED]
 2026-03-21 10:43:02|Me|[REDACTED]
 2026-03-29 10:15:40|SBICRD-S|[REDACTED]
 
@@ -139,7 +139,7 @@ Ready to see full message content? (y/n) y
 
 📬 Full Messages:
 
-2026-03-21 10:42:15|+917766554433|Hello!
+2026-03-21 10:42:15|+91XXXXXXXXXX|Hello!
 2026-03-21 10:43:02|Me|Hi there
 2026-03-29 10:15:40|SBICRD-S|[Media/Attachment]
 ```
@@ -149,7 +149,7 @@ Ready to see full message content? (y/n) y
 ```
 | Time | Sender | Message |
 |------|--------|---------|
-| 2026-03-21 10:42:15 | +917766554433 | Hello! |
+| 2026-03-21 10:42:15 | +91XXXXXXXXXX | Hello! |
 | 2026-03-21 10:43:02 | Me | Hi there |
 | 2026-03-29 10:15:40 | SBICRD-S(smsft) | [Media/Attachment] |
 ```

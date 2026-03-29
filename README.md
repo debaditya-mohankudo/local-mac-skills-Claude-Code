@@ -93,7 +93,7 @@ These are real prompts you can type directly into Claude Code once the skills ar
 ```text
 send "Hey, on my way!" to +1XXXXXXXXXX
 send an iMessage to user@example.com saying "Meeting rescheduled to 3pm"
-send a message to +919988776655 after 5 minutes saying "Call me back"
+send a message to +91XXXXXXXXXX after 5 minutes saying "Call me back"
 ```
 
 **Check messages:**
@@ -101,7 +101,7 @@ send a message to +919988776655 after 5 minutes saying "Call me back"
 ```text
 check messages from the last 30 minutes
 show iMessages received in the last hour
-check all messages from +917766554433 in the last 2 hours
+check all messages from +91XXXXXXXXXX in the last 2 hours
 ```
 
 **Configuration (optional):**
