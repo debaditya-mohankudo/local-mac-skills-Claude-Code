@@ -30,6 +30,25 @@ git diff --cached | grep -E '\+91[0-9]{10}|[^x][0-9]{10}|@[a-z]+\.[a-z]+' && ech
 
 If personal data is found, **do not commit**. Replace with placeholders first.
 
+## Development Workflow
+
+**Always develop features in a new branch, not on `main`.**
+
+```bash
+# Create and switch to a feature branch
+git checkout -b feature/description-of-change
+
+# After development and testing, create a PR to merge into main
+# Do not commit directly to main
+```
+
+**Why:**
+
+- Keeps `main` stable and ready for production
+- Allows for code review and testing before merging
+- Prevents accidental commits of unfinished features
+- Makes it easier to revert changes if needed
+
 ## Skills
 
 All skills for this project are installed globally at `~/.claude/skills/` and are available in every Claude Code session.
