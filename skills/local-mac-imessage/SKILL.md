@@ -82,8 +82,10 @@ If the script errors (e.g. buddy not found, Messages not signed in), report the 
 When the user asks to check/read/show iMessages received in the last N minutes (e.g. "check messages since last 30 minutes"), use the tool below. If no duration is specified, default to 30 minutes:
 
 ```bash
-~/workspace/claude_for_mac_local/tools/imessage_check.sh [MINUTES] [PHONE_NUMBER]
+~/workspace/claude_for_mac_local/tools/imessage_check.sh [MINUTES] [CONTACT]
 ```
+
+`CONTACT` can be a phone number (e.g. `+919988776655`) or contact name (e.g. `Simraan`).
 
 ### Check all messages (last 30 minutes by default):
 ```bash
@@ -98,7 +100,7 @@ When the user asks to check/read/show iMessages received in the last N minutes (
 ### Check messages from a specific contact (optional):
 ```bash
 ~/workspace/claude_for_mac_local/tools/imessage_check.sh 120 +919988776655
-~/workspace/claude_for_mac_local/tools/imessage_check.sh 120 +917766554433
+~/workspace/claude_for_mac_local/tools/imessage_check.sh 120 Simraan
 ```
 
 ### Using .env for default phone number:

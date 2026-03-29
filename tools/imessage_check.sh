@@ -2,7 +2,7 @@
 # Usage: imessage_check.sh [MINUTES] [CONTACT]
 # Reads iMessages from the last N minutes (default: 30).
 # Optionally filter by phone number or contact name (e.g., imessage_check.sh 30 Simraan).
-# If no contact provided, loads PHONE_NUMBER from .env
+# If no contact provided, loads IMESSAGE_PHONE_NUMBER from .env
 # Requires Full Disk Access for the terminal app.
 
 # Load .env if it exists (from project root)
@@ -12,7 +12,7 @@ if [ -f "$PROJECT_ROOT/.env" ]; then
 fi
 
 MINUTES="${1:-30}"
-CONTACT="${2:-${PHONE_NUMBER:-}}"
+CONTACT="${2:-${IMESSAGE_PHONE_NUMBER:-}}"
 
 # Function to resolve contact name to phone numbers
 resolve_contact() {

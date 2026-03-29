@@ -22,11 +22,11 @@ if [[ -z "$TRUSTED_CONTACT" ]]; then
     fi
 
     source .env
-    if [[ -z "$PHONE_NUMBER" ]]; then
-        echo "$(date) [ERROR] PHONE_NUMBER not set in .env and no contact argument provided" >> "$LOG_FILE"
+    if [[ -z "$IMESSAGE_PHONE_NUMBER" ]]; then
+        echo "$(date) [ERROR] IMESSAGE_PHONE_NUMBER not set in .env and no contact argument provided" >> "$LOG_FILE"
         exit 1
     fi
-    TRUSTED_CONTACT="$PHONE_NUMBER"
+    TRUSTED_CONTACT="$IMESSAGE_PHONE_NUMBER"
 fi
 
 # Initialize state file if needed
