@@ -137,6 +137,8 @@ The `tools/` directory contains shell scripts required by all local-mac skills. 
 | `wifi_control.sh` | local-mac-wifi (status, on, off, current SSID, list available networks) |
 | `sleep_control.sh` | local-mac-sleep (now, in N minutes, winddown, status, cancel) |
 | `time_control.sh` | local-mac-time (now, alarm HH:MM, wait N minutes) |
+| `scan_personal_data.sh` | Security utility — scan codebase for personal data patterns (phone numbers, emails, IPs, API keys) |
+| `git_local.sh` | Git wrapper — enforces personal data checks before committing (used by `/gc-gp` skill) |
 
 ## Config Files
 
