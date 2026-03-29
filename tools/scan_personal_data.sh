@@ -20,8 +20,8 @@ echo "🔍 Scanning for personal data patterns..."
 echo "   Project root: $PROJECT_ROOT"
 echo ""
 
-# Exclude patterns
-EXCLUDE_DIRS="--exclude-dir=.venv --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=.cache --exclude-dir=dist --exclude-dir=build"
+# Exclude patterns (already in .gitignore, or not part of committed code)
+EXCLUDE_DIRS="--exclude-dir=.venv --exclude-dir=.git --exclude-dir=.claude --exclude-dir=node_modules --exclude-dir=.cache --exclude-dir=dist --exclude-dir=build"
 EXCLUDE_FILES="--exclude=*.lock --exclude=*.whl"
 FILE_TYPES="--include=*.md --include=*.sh --include=*.py --include=*.json --include=*.yml --include=*.yaml"
 
@@ -42,7 +42,7 @@ echo ""
 
 # 2. Check for non-placeholder emails
 echo "2️⃣  Checking for non-placeholder email addresses..."
-if grep -rE '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}' $FILE_TYPES $EXCLUDE_DIRS $EXCLUDE_FILES "$SCAN_DIR" 2>/dev/null | grep -v 'example.com' | grep -v '@github' | grep -v 'git@' > /tmp/emails.txt 2>&1; then
+if grep -rE '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}' $FILE_TYPES $EXCLUDE_DIRS $EXCLUDE_FILES "$SCAN_DIR" 2>/dev/null | grep -v 'example.com' | grep -v '@github' | grep -v 'git@' | grep -v 'user@' > /tmp/emails.txt 2>&1; then
   if [[ -s /tmp/emails.txt ]]; then
     echo -e "${RED}✗ Found potential personal email addresses:${NC}"
     head -20 /tmp/emails.txt | sed 's/^/   /'
@@ -70,12 +70,14 @@ else
 fi
 echo ""
 
-# 4. Check for API keys/tokens (simple pattern)
+# 4. Check for API keys/tokens (actual value patterns)
 echo "4️⃣  Checking for exposed API keys/secrets..."
-if grep -rE 'api.?key|secret|token|password' $FILE_TYPES $EXCLUDE_DIRS $EXCLUDE_FILES "$SCAN_DIR" 2>/dev/null | grep -v 'PLACEHOLDER\|EXAMPLE\|XXXXXXXXXX\|xxxxxxxx\|example.com' > /tmp/keys.txt 2>&1; then
+# Look for actual exposed values like: api_key = "abc123..." (non-placeholder)
+if grep -rE '(api.?key|secret|token|password)\s*[=:]\s*["\047][a-zA-Z0-9+/=]{20,}' $FILE_TYPES $EXCLUDE_DIRS $EXCLUDE_FILES "$SCAN_DIR" 2>/dev/null | grep -v 'PLACEHOLDER\|EXAMPLE\|XXXXXXXXXX\|xxxxxxxx' > /tmp/keys.txt 2>&1; then
   if [[ -s /tmp/keys.txt ]]; then
-    echo -e "${YELLOW}⚠ Found patterns matching API key keywords (review manually):${NC}"
+    echo -e "${RED}✗ Found potential exposed API keys:${NC}"
     head -20 /tmp/keys.txt | sed 's/^/   /'
+    FOUND_ISSUES=1
   else
     echo -e "${GREEN}✓ No exposed API keys/tokens found${NC}"
   fi
