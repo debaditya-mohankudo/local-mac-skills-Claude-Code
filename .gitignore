@@ -1,0 +1,9 @@
+.DS_Store
+.cache/
+.claude/
+tools/ssh_hosts.conf
+.env
+
+# Contacts cache (global)
+.contacts_cache
+~/.contacts_cache
