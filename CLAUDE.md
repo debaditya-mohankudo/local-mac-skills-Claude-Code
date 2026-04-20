@@ -1,5 +1,7 @@
 # claude_for_mac_local
 
+> **Public repo notice:** No personal contact details, financial details, or email addresses shall be part of this code or any committed files.
+
 macOS automation skills and tools for Claude Code — calendar, contacts, iMessage, mail, reminders, notes, processes, screen recording, Safari, music, Finder, network, storage, Docker, SSH, Wi-Fi, and market intelligence.
 
 **Timezone:** IST (India Standard Time / Kolkata)
