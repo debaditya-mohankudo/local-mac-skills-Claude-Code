@@ -1,23 +1,12 @@
 [project]
 name = "claude-for-mac-local"
 version = "0.1.0"
-description = "Local macOS skills and market intelligence MCP server"
+description = "Local macOS skills MCP server (Swift CLI bridge + vault)"
 requires-python = ">=3.10"
 dependencies = [
     "mcp>=1.0.0",
-    "yfinance",
-    "pytz",
-    "tomli>=2.0.1; python_version < '3.11'",
-    "polars>=1.38.1",
-    "pyarrow>=23.0.1",
-    "feedparser>=6.0.0",
     "fastmcp>=0.1.0",
-    "playwright>=1.58.0",
-    "tinydb>=4.8.0",
-    "pyyaml>=6.0.3",
     "python-dotenv>=1.0.0",
-    "graphifyy>=0.1.0",
-    "mistletoe>=1.3.0",
 ]
 
 [project.optional-dependencies]

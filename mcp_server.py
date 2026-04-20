@@ -1,4 +1,4 @@
-"""Single MCP server — local-mac tools (via Swift CLI) + market-intel tools (Python) + vault (filesystem)."""
+"""Single MCP server — local-mac tools (via Swift CLI) + vault (filesystem)."""
 import os
 import subprocess
 import sys
@@ -15,20 +15,6 @@ from swift_bridge import call_swift
 
 VAULT_NAME = os.environ.get("VAULT_NAME", "claude_documents")
 VAULT_PATH = Path(os.environ.get("VAULT_PATH", Path.home() / "workspace" / "claude_documents"))
-from tools import (
-    get_latest_market_data,
-    check_deployment_triggers,
-    get_signal_risk_level,
-    get_portfolio_status,
-    get_daily_news_digest,
-    get_fii_dii_activity,
-    get_gold_regime_history,
-    get_gold_regime_projection,
-    get_india_adr_quotes,
-    check_ceasefire_signals,
-    get_panchang_today,
-)
-
 mcp = FastMCP("local-mac")
 
 # ---------------------------------------------------------------------------
@@ -427,76 +413,6 @@ def foundation_models_query(prompt: str, system: str = None, max_tokens: int = 2
     payload = {"prompt": prompt, "max_tokens": max_tokens}
     if system: payload["system"] = system
     return call_swift("foundation-models-query", payload)
-
-
-# ---------------------------------------------------------------------------
-# Market Intel (Python)
-# ---------------------------------------------------------------------------
-
-@mcp.tool()
-def market_get_latest_data() -> dict:
-    """Get latest cached market data (Nifty, Gold, Oil, DXY, VIX, INR)."""
-    return get_latest_market_data()
-
-
-@mcp.tool()
-def market_check_deployment_triggers() -> dict:
-    """Check portfolio deployment triggers against current Nifty level."""
-    return check_deployment_triggers()
-
-
-@mcp.tool()
-def market_get_signal_risk_level() -> dict:
-    """Get current signal risk level for portfolio."""
-    return get_signal_risk_level()
-
-
-@mcp.tool()
-def market_get_portfolio_status() -> dict:
-    """Get full portfolio allocation status."""
-    return get_portfolio_status()
-
-
-@mcp.tool()
-def market_get_daily_news_digest() -> dict:
-    """Fetch today's news digest from RSS feeds."""
-    return get_daily_news_digest()
-
-
-@mcp.tool()
-def market_get_fii_dii_activity() -> dict:
-    """Fetch today's FII/DII institutional flow data from NSE."""
-    return get_fii_dii_activity()
-
-
-@mcp.tool()
-def market_get_gold_regime_history() -> dict:
-    """Get Gold regime history and current regime classification."""
-    return get_gold_regime_history()
-
-
-@mcp.tool()
-def market_get_gold_regime_projection() -> dict:
-    """Get Gold regime projection for upcoming weeks."""
-    return get_gold_regime_projection()
-
-
-@mcp.tool()
-def market_get_india_adr_quotes() -> dict:
-    """Get live ADR quotes for key Indian stocks listed on NYSE."""
-    return get_india_adr_quotes()
-
-
-@mcp.tool()
-def market_check_ceasefire_signals() -> dict:
-    """Check for ceasefire/diplomatic signals in latest news."""
-    return check_ceasefire_signals()
-
-
-@mcp.tool()
-def market_get_panchang(date: str = None) -> dict:
-    """Get Panchang (Hindu calendar) data for a date (YYYY-MM-DD, defaults today)."""
-    return get_panchang_today(date)
 
 
 # ---------------------------------------------------------------------------
