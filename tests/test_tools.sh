@@ -248,6 +248,42 @@ fi
 
 
 echo ""
+echo "Market Prices (SQLite3)"
+echo "----------------------"
+MPC=~/.claude/workspace/claude_for_mac_local/local-mac-mcp/.build/arm64-apple-macosx/release/local-mpc
+if [[ ! -f "$MPC" ]]; then
+  MPC=~/workspace/claude_for_mac_local/local-mac-mcp/.build/arm64-apple-macosx/release/local-mpc
+fi
+if [[ -f "$MPC" ]]; then
+  run_contains "market_prices_query: Gold > 4700"      "gold\|date"   "$MPC" call market_prices_query '{"expression": "Gold > 4700"}'
+  run_contains "market_prices_history: nifty50"        "nifty50\|date" "$MPC" call market_prices_history '{"column": "nifty50", "from_date": "2021-03-25", "to_date": "2021-04-05"}'
+  run_contains "market_watchlist_history: all stocks"  "adani_ports\|bosch\|date" "$MPC" call market_watchlist_history '{"from_date": "2021-01-01", "to_date": "2021-01-10"}'
+else
+  echo "  SKIP  local-mpc binary not found"
+fi
+
+echo ""
+echo "Gold Regime (Native Swift)"
+echo "-------------------------"
+if [[ -f "$MPC" ]]; then
+  run_contains "market_gold_history: regime classification"  "current_regime\|streak_days\|momentum_5d" "$MPC" call market_gold_history '{}'
+  run_contains "market_gold_projection: regime probabilities" "most_likely\|confidence\|probabilities" "$MPC" call market_gold_projection '{}'
+else
+  echo "  SKIP  local-mpc binary not found"
+fi
+
+echo ""
+echo "India ADR Quotes (Python/yfinance)"
+echo "----------------------------------"
+if [[ -f "$MPC" ]]; then
+  run_contains "market_adr: returns ADR sectors"   "Banking\|IT\|Pharma"  "$MPC" call market_adr '{}'
+  run_contains "market_adr: contains ticker field" "ticker"               "$MPC" call market_adr '{}'
+  run_contains "market_adr: contains change_pct"   "change_pct"           "$MPC" call market_adr '{}'
+else
+  echo "  SKIP  local-mpc binary not found"
+fi
+
+echo ""
 echo "Screen Recording"
 echo "----------------"
 run_blocked  "screencapture_control: missing arg"        "Usage"    "$TOOLS/screencapture_control.sh"

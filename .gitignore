@@ -1,4 +1,8 @@
 .DS_Store
+__pycache__/
+*.pyc
+*.pyo
+.venv/
 .cache/
 .claude/
 tools/ssh_hosts.conf
@@ -7,3 +11,4 @@ tools/ssh_hosts.conf
 # Contacts cache (global)
 .contacts_cache
 ~/.contacts_cache
+.vscode/

@@ -20,11 +20,7 @@ Get the current time, set a future alarm, or start a countdown timer — all bac
 
 ## NOW — get current time
 
-```bash
-~/workspace/claude_for_mac_local/tools/time_control.sh now
-```
-
-Output the result directly.
+Call `mcp__local-mac__time_now` and output the result directly.
 
 ---
 
@@ -36,22 +32,18 @@ Output the result directly.
 
 **Step 2 — Set the alarm:**
 
-```bash
-# basic — at job only
-~/workspace/claude_for_mac_local/tools/time_control.sh alarm HH:MM [label]
+Call `mcp__local-mac__time_alarm` with:
+- `time`: HH:MM (24-hour)
+- `label`: optional label string
+- `reminder`: set `true` when the alarm must survive a reboot or sync to iPhone/iPad
 
-# hardened — at job + Apple Reminder (survives reboot, syncs to iPhone)
-~/workspace/claude_for_mac_local/tools/time_control.sh alarm --reminder HH:MM [label]
-```
-
-- Time must be 24-hour `HH:MM`
-- If the time has already passed today, the script automatically schedules it for tomorrow
+- If the time has already passed today, the binary automatically schedules it for tomorrow
 - `at` job fires a macOS notification + modal alert at the exact time
-- `--reminder` additionally creates an Apple Reminder with a due date — use this when the alarm must survive a reboot or sync to iPhone/iPad
+- `reminder=true` additionally creates an Apple Reminder with a due date
 
 **Step 3 — Confirm:**
 
-Report what the script prints, e.g.:
+Report the result string, e.g.:
 `Alarm set: "Wake up" at 07:00 on Thu 26 Mar (scheduled via at + Apple Reminder)`
 
 ---
@@ -64,14 +56,13 @@ Report what the script prints, e.g.:
 
 **Step 2 — Start the timer:**
 
-```bash
-~/workspace/claude_for_mac_local/tools/time_control.sh wait <minutes> [label]
-```
+Call `mcp__local-mac__time_wait` with:
+- `minutes`: number (int or float)
+- `label`: optional label string
 
-- Runs entirely in the background — no blocking
-- Fires a macOS notification + modal alert when the timer expires
+Runs entirely in the background — fires a macOS notification + modal alert when the timer expires.
 
 **Step 3 — Confirm:**
 
-Report what the script prints, e.g.:
-`Timer started: "Tea" — 5 min, finishes at 18:35:00`
+Report the result string, e.g.:
+`Timer started: "Tea" — 5 min, finishes ~18:35 (scheduled via at)`

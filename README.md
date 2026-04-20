@@ -1,406 +1,93 @@
-# local-mac-skills — Claude Code
+# claude_for_mac_local
 
-A collection of **Claude Code skills** that let you control native macOS apps and remote workstations — iMessage, Mail, Calendar, Notes, Reminders, Contacts, Storage, Spotify, SSH+Docker, and **Obsidian vault management** — entirely through natural language prompts inside Claude Code.
+Full documentation lives in the Obsidian vault:
 
-Built-in guardrails enforced at the script level: Notes access is scoped to a dedicated `Claude` folder; Mail and Contacts are read-only; SSH connections are restricted to an explicit host allowlist; destructive SSH commands (`rm -rf`, `docker system prune`) require confirmation; database queries are read-only via `--read-only` flag plus a local SQL keyword block; iMessage send confirms ambiguous recipients; Spotify and iMusic are playback-only with no URI guessing.
+**`Documentation/Tools/WIKI_HOME.md`**
 
----
-
-## What is a Claude Code Skill?
-
-A skill is a `SKILL.md` file placed in `~/.claude/skills/<skill-name>/`. Claude Code loads it automatically and maps natural language prompts to shell scripts on your machine. No plugins, no cloud calls — just AppleScript + bash running locally.
-
----
-
-## Highlight — iMusic Control
-
-> **Control iMusic without leaving Claude Code.**
-
-Play playlists by nickname, skip tracks, adjust volume — via AppleScript. No API, no URI hunting. Playlist names map directly from your library.
-
-```text
-play focus playlist
-pause music
-next track
-what's playing?
-set volume to 60
-```
-
-→ [View skill definition](skills/local-mac-music/SKILL.md)
-
----
-
-## Highlight — Spotify Control
-
-> **Control Spotify without leaving Claude Code.**
-
-Play saved playlists, skip tracks, adjust volume — all via natural language. No API token, no OAuth. Pure AppleScript. One-time setup: paste your playlist URIs into `spotify_config.py`.
-
-```text
-play focus playlist
-pause spotify
-next track
-what's playing?
-set volume to 60
-```
-
-→ [View skill definition](skills/local-mac-spotify/SKILL.md)
-
----
-
-## Highlight — Remote Dev via SSH + Docker
-
-> **Talk to your remote workstations in plain English.**
-
-If you run your development stack on a remote workstation (Docker Compose, containers, services), this skill lets you manage it entirely through Claude Code — no terminal tab-switching, no typing raw SSH commands.
-
-**Save your workstation once:**
-
-```text
-save host dev as ubuntu@192.168.1.10
-```
-
-**Then just ask:**
-
-```text
-show docker containers on dev
-docker logs api-service on dev
-compose restart worker on dev
-copy logs of nginx on dev
-run free -h on dev
-```
-
-Works with any pre-authenticated SSH machine (key-based auth, no passwords). Uses `BatchMode=yes` — never hangs. Destructive commands like `docker system prune` always ask for confirmation first.
-
-→ [View skill definition](skills/local-mac-ssh/SKILL.md)
-
----
-
-## Highlight — Obsidian Knowledge Vault
-
-> **Manage your knowledge base with claude-mac-obsidian.**
-
-Create, read, search, and link notes with bidirectional links. Build a personal knowledge graph stored in Obsidian with full graph visualization.
-
-```text
-read a note "Note Title"
-write a new note with links to [[Related Notes]]
-list all my notes
-show me what references [[This Note]]
-```
-
-**Automatically capture session thinking:**
-
-```text
-capture session: "# Daily Session\n\n## What we worked on\n..."
-```
-
-All notes stored in `~/Documents/claude_documents` — ready to open in Obsidian Desktop with full graph visualization.
-
-→ [View claude-mac-obsidian skill](skills/claude-mac-obsidian/SKILL.md)
-→ [View local-mac-summarize-claude-session skill](skills/local-mac-summarize-claude-session/SKILL.md)
-
----
+Vault path is configured in `.env` via `VAULT_PATH`.
+Open in Obsidian using that path, or read via `/local-mac-vault read "Documentation/Tools/WIKI_HOME"`.
 
 ## Skills
 
-→ [Full skills reference](https://docs.claude.ai/claude-code)
+### Quick Picks
 
----
+| Skill | Use for |
+|---|---|
+| /local-mac-vault | Read/write/search notes in the vault quickly. |
+| /local-mac-imessage | Send or read iMessages from macOS. |
+| /local-mac-calendar | Add, remove, or list calendar events. |
+| /local-mac-network | Check ports, DNS, ping, and endpoint health. |
+| /market-intel-live-news | Get the latest RSS news digest with categories. |
+| /market-intel-live-prices | Fetch live prices for the 9 tracked tickers. |
+| /market-intel-morning-brief | Run the full start-of-day market snapshot. |
+| /market-intel-portfolio-check | Review allocation, triggers, and risk constraints. |
 
-## Prompts
+| Skill Name | Purpose (1 sentence) |
+|---|---|
+| /apfel-vault-chat | Run private on-device chat over the full vault using apfel + MCP. |
+| /kaise | Break a plain-language task into the right skills and execution order. |
+| /local-mac-calendar | Read, create, and manage local Apple Calendar events. |
+| /local-mac-call | Place a phone call from macOS using a contact or number. |
+| /local-mac-cleanup-repo | Reset repository history and publish a fresh verified-clean state. |
+| /local-mac-contacts | Find contacts and return their phone/details from macOS Contacts. |
+| /local-mac-docker | Inspect and manage local Docker containers, logs, stats, and compose services. |
+| /local-mac-finder | Control Finder actions such as open, reveal, list, create folders, and trash. |
+| /local-mac-imessage | Read and send iMessages through the native Messages app. |
+| /local-mac-mail | Read and list emails from selected Apple Mail folders. |
+| /local-mac-music | Control Music.app playback, volume, and playlist actions. |
+| /local-mac-network | Check local network health, ports, DNS, ping, and endpoint reachability. |
+| /local-mac-notes | Read and manage Apple Notes entries in the Claude folder. |
+| /local-mac-notify | Create and review macOS Notification Center alerts. |
+| /local-mac-process | List running processes and terminate by PID when needed. |
+| /local-mac-reminders | Read and manage Apple Reminders with list and status filters. |
+| /local-mac-safari | Automate Safari browsing, extraction, interaction, and screenshots. |
+| /local-mac-scan-personal-data | Scan the repository for potential personal data before commit/push. |
+| /local-mac-screencapture | Start, stop, and inspect screen recordings saved as .mov. |
+| /local-mac-sleep | Sleep the Mac immediately, on timer, or via wind-down routine. |
+| /local-mac-spotify | Control Spotify playback, volume, and named playlists. |
+| /local-mac-ssh | Connect to pre-authenticated remote workstations and run remote operations. |
+| /local-mac-storage | Check disk usage and perform guided local storage cleanup. |
+| /local-mac-time | Get time, set alarms, and run countdown timers with notifications. |
+| /local-mac-vault | Perform unified vault read/write/search/tasks/links/session operations. |
+| /local-mac-whisper | Transcribe audio/video with whisper.cpp and output text/srt files. |
+| /local-mac-wifi | Toggle Wi-Fi and inspect current and nearby network status. |
+| /market-intel-ceasefire-reached | Check which ceasefire signals fired and the current risk level. |
+| /market-intel-evening-adr | Fetch and summarize Indian ADR moves during the evening window. |
+| /market-intel-evening-brief | Generate a full evening brief across ADR, flows, and Nifty context. |
+| /market-intel-fii-dii-check | Report daily FII/DII flows with streak and monthly totals. |
+| /market-intel-gold | Classify gold regime and recommend BUY/HOLD/TRIM-style action. |
+| /market-intel-live-news | Build a live RSS-based geopolitical + market news digest. |
+| /market-intel-live-prices | Fetch real-time prices for the 9 monitored core tickers. |
+| /market-intel-market-refresh | Refresh cached market data and append latest live quote snapshot. |
+| /market-intel-morning-brief | Produce the full morning market-intel starter brief. |
+| /market-intel-nifty-analysis | Analyze Nifty price action with flows, VIX, and expiry context. |
+| /market-intel-portfolio-check | Show allocation, triggers, dry powder, and portfolio constraints. |
+| /market-intel-query | Run historical regime-aware query analysis for custom market conditions. |
+| /market-intel-watchlist-check | Check live watchlist prices versus entry zones and patch watchlist wiki prices. |
 
-These are real prompts you can type directly into Claude Code once the skills are installed.
+## Building
 
-### iMessage
+**Claude - Build the swift binaries required for mcp tools**
 
-**Send messages:**
-
-```text
-send "Hey, on my way!" to +1XXXXXXXXXX
-send an iMessage to user@example.com saying "Meeting rescheduled to 3pm"
-send a message to +91XXXXXXXXXX after 5 minutes saying "Call me back"
-```
-
-**Check messages:**
-
-```text
-check messages from the last 30 minutes
-show iMessages received in the last hour
-check all messages from +91XXXXXXXXXX in the last 2 hours
-```
-
-**Configuration (optional):**
-
-Copy `.env.example` to `.env` and set your default phone number for quick message checks:
-
-```bash
-cp .env.example .env
-# Edit .env and set IMESSAGE_PHONE_NUMBER=your_number
-```
-
-### Mail
-
-```text
-check last 5 emails from iCloud
-show 10 emails from my Gmail
-read email 3
-```
-
-### Calendar
-
-```text
-show my calendar for this week
-what do I have tomorrow?
-add event "Team standup" on Monday at 10am
-add event "Dentist" on Friday at 2pm for 1 hour
-delete event "Old meeting"
-```
-
-### Notes
-
-```text
-list my notes
-show note "Meeting summary"
-add note "Ideas" — launch in Q3, redesign onboarding
-delete note "Old draft"
-search notes for "budget"
-```
-
-### Reminders
-
-```text
-show my pending reminders
-show all reminders from the Home list
-add reminder "Call dentist" due Friday at 10am
-add reminder "Pay rent" due 1st of next month
-delete reminder "Buy groceries"
-```
-
-### Contacts
-
-```text
-find contact John
-look up Sarah's phone number
-search for "Doe" with email
-```
-
-### Storage
-
-```text
-check my Mac storage
-what's using disk space?
-/local-mac-storage
-how much free space do I have?
-```
-
-### iMusic
-
-```text
-play focus playlist
-pause music
-next track
-previous track
-what's playing?
-set volume to 70
-what's the volume?
-list playlists
-/local-mac-music list-playlists
-```
-
-### Spotify
-
-```text
-play focus playlist
-pause spotify
-next track
-previous track
-what's playing?
-set volume to 70
-```
-
-### Safari
-
-```text
-open https://example.com in Safari
-what's the current page title?
-list all open tabs
-read the page content
-get all links on this page
-click the submit button
-fill in the email field with test@example.com
-take a screenshot of the current page
-go back
-```
-
-### SSH + Docker
-
-```text
-save host dev as ubuntu@192.168.1.10
-run df -h on dev
-show docker containers on dev
-docker logs api-service on dev
-copy logs of nginx on dev
-compose restart worker on dev
-compose up on ubuntu@10.0.0.5
-```
-
----
-
-## Guardrails
-
-Each skill has built-in restrictions enforced at both the instruction level and the shell script level.
-
----
-
-## Configuration
-
-Config files live at the **root of the repo**. All are plain shell files — open in any text editor, uncomment lines, and save.
-
-### `ssh_config.sh` — remote workstations
+If you want to build by yourself:
 
 ```bash
-SSH_dev_host="ubuntu@192.168.1.10"
-SSH_dev_desc="Local dev workstation"
-LOG_TAIL_LINES=50
-COMPOSE_PATH="/home/ubuntu/myapp"
+cd local-mac-mcp
+bash build.sh
 ```
 
-### `music_config.sh` — iMusic playlists
+The release binary will be built to:
+```
+local-mac-mcp/.build/arm64-apple-macosx/release/local-mpc
+```
 
+Symlink it to the bin directory:
 ```bash
-PLAYLIST_focus="Deep Focus"    # exact name as it appears in Music.app
-PLAYLIST_chill="Chill Vibes"
+ln -sf local-mac-mcp/.build/arm64-apple-macosx/release/local-mpc bin/local-mcp
 ```
 
-### `spotify_config.sh` — Spotify playlists
-
+Test the build:
 ```bash
-PLAYLIST_focus="spotify:playlist:xxxxxxxx"
-PLAYLIST_chill="spotify:playlist:xxxxxxxx"
+./bin/local-mcp --version
+./bin/local-mcp call mail_list_mailboxes '{}'
 ```
-
-Get a Spotify URI: right-click any playlist in Spotify → Share → Copy Spotify URI.
-
-### `safari_config.sh` — allowed URLs
-
-```bash
-DISABLE_ALLOWLIST=false
-ALLOWED_URLS=(
-    "google.com"
-    "github.com"
-)
-```
-
----
-
-## Installation
-
-### 1. Clone the repo
-
-```bash
-git clone git@github.com:YOUR_USERNAME/local-mac-skills-Claude-Code.git ~/workspace/claude_for_mac_local
-```
-
-### 2. Install skills globally
-
-```bash
-cp -r ~/workspace/claude_for_mac_local/skills/* ~/.claude/skills/
-```
-
-### 3. Make tool scripts executable
-
-```bash
-chmod +x ~/workspace/claude_for_mac_local/tools/*.sh
-```
-
-### 4. Grant permissions (first use)
-
-Some skills require macOS permissions:
-
-| Skill | Permission needed |
-| ----- | ----------------- |
-| iMessage (send) | Accessibility — System Settings → Privacy & Security → Accessibility |
-| iMessage (read) | Full Disk Access — System Settings → Privacy & Security → Full Disk Access |
-| Mail | Automation — grant when prompted on first run |
-| Calendar | Calendars — grant when prompted on first run |
-| Notes | Automation — grant when prompted on first run |
-| Reminders | Reminders — grant when prompted on first run |
-| Contacts | Contacts — grant when prompted on first run |
-| Spotify | Automation — grant when prompted on first run |
-
----
-
-## Structure
-
-```text
-.
-├── skills/                  # Skill definitions (copy to ~/.claude/skills/)
-│   ├── claude-mac-obsidian/                 # Obsidian vault management
-│   ├── local-mac-calendar/
-│   ├── local-mac-contacts/
-│   ├── local-mac-imessage/
-│   ├── local-mac-mail/
-│   ├── local-mac-notes/
-│   ├── local-mac-reminders/
-│   ├── local-mac-storage/
-│   ├── local-mac-music/
-│   ├── local-mac-safari/
-│   ├── local-mac-spotify/
-│   ├── local-mac-ssh/
-│   └── local-mac-summarize-claude-session/ # Session documentation
-├── tools/                   # Shell scripts called by skills
-│   ├── obsidian_read.sh
-│   ├── obsidian_write.sh
-│   ├── obsidian_list.sh
-│   ├── obsidian_delete.sh
-│   ├── obsidian_links.sh
-│   ├── obsidian_backlinks.sh
-│   ├── obsidian_summarize_session.sh
-│   ├── imessage_send.sh
-│   ├── imessage_check.sh
-│   ├── mail_fetch_inbox.sh
-│   ├── calendar_list_events.sh
-│   ├── contacts_search.sh
-│   ├── storage_overview.sh
-│   ├── music_control.sh
-│   ├── safari_control.sh
-│   ├── spotify_control.sh
-│   ├── ssh_run.sh
-│   └── ...
-├── ssh_config.sh            # SSH workstation list + defaults
-├── music_config.sh          # iMusic playlist nicknames
-├── spotify_config.sh        # Spotify playlist nicknames
-├── safari_config.sh         # Safari URL allowlist
-└── CLAUDE.md                # Claude Code project instructions
-```
-
----
-
-## IDE Support
-
-These skills work in any environment where Claude Code runs. Supported IDEs:
-
-| IDE / Editor | How to use |
-| ------------ | ---------- |
-| **VS Code** (v1.98+) | Install the Claude Code extension — full graphical panel with diffs and checkpoints |
-| **Cursor** | Same as VS Code — uses the VS Code extension |
-| **JetBrains** (IntelliJ, PyCharm, WebStorm, GoLand, Android Studio, PhpStorm) | Install the Claude Code plugin — runs via the integrated terminal |
-| **Chrome / Edge** | Claude in Chrome extension — browser automation via `@browser` or `--chrome` flag |
-| **Terminal (any)** | Run `claude` directly — all skills work the same way |
-
----
-
-## Requirements
-
-- macOS (Apple Silicon or Intel)
-- [Claude Code](https://claude.ai/claude-code) CLI installed
-- `osascript` (built into macOS)
-- `sqlite3` (built into macOS, used by iMessage read)
-- `bash` and standard Unix tools
-
----
-
-## Contributing
-
-PRs welcome. Each skill lives in `skills/<name>/SKILL.md` — the format is plain markdown with a YAML frontmatter block. Shell tools go in `tools/`.

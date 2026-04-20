@@ -4,7 +4,9 @@ description: Use this skill when the user asks to read, show, list, add, create,
 user-invocable: true
 ---
 
-Read, add, or delete Apple Calendar events via AppleScript.
+Read, add, or delete Apple Calendar events. All operations go through the **Python MCP server** (`mcp_server.py`) → Swift CLI binary (`~/bin/local-mac-tool`). Use MCP tool use directly — `local-mpc` is retired.
+
+> See vault: `Projects/SWIFT_CLI_MCP_MIGRATION.md`
 
 Default calendar: **Work** (iCloud). All read, add, and delete operations target the Work calendar unless the user explicitly specifies a different one.
 
@@ -26,19 +28,26 @@ Branch to the appropriate section below.
 From the user's message extract:
 - **title** (required) — event name
 - **calendar** — target calendar name (default: `Work`)
-- **start date/time** (required) — convert to `MM/DD/YYYY HH:MM:SS`; if no time given use `09:00:00`
-- **end date/time** — if not specified, default to start + 1 hour
+- **start_date** (required) — convert to ISO-8601, e.g. `2026-04-10T09:00:00Z`; if no time given use `09:00:00Z`
+- **end_date** — if not specified, defaults to start + 1 hour
 - **notes** — any extra detail
 
 **Step 3a — Create the event:**
 
-```bash
-~/workspace/claude_for_mac_local/tools/calendar_add_event.sh "CALENDAR" "TITLE" "START" "END" ["NOTES"]
+MCP tool: `calendar_add_event`
+```json
+{
+  "title": "TITLE",
+  "calendar": "CALENDAR",
+  "start_date": "2026-04-10T09:00:00Z",
+  "end_date": "2026-04-10T10:00:00Z",
+  "notes": "NOTES"
+}
 ```
 
 **Step 4a — Confirm:**
 
-Output: `Added "[title]" to [calendar] on [date] from [start time] to [end time].`
+Output: `Added "[title]" to [calendar] on [ISO date]`
 
 ---
 
@@ -50,12 +59,13 @@ Extract event title (or partial) and optionally a date or calendar name.
 
 **Step 3b — Find the event:**
 
-Fetch a broad date range (±30 days from today) using the read tool below, then find events whose title contains the search string (case-insensitive). If multiple matches, list them and ask the user to confirm which one. If exactly one match, proceed.
+The tool automatically searches within a ±30-day window from today. If multiple matches, the tool returns a list and asks you to confirm which one. If exactly one match, the tool proceeds with deletion.
 
 **Step 4b — Delete the event:**
 
-```bash
-~/workspace/claude_for_mac_local/tools/calendar_delete_event.sh "CALENDAR" "EXACT TITLE"
+MCP tool: `calendar_delete_event`
+```json
+{ "title": "TITLE", "calendar": "CALENDAR" }
 ```
 
 **Step 5b — Confirm:**
@@ -77,20 +87,24 @@ Output: `Deleted "[title]" from [calendar].`
   - Explicit date → that day
 - **Calendar filter**: default to `Work` only. Only include other calendars if the user explicitly names one.
 
-**Step 3c — Fetch events:**
+**Step 3c — Convert date range to ISO-8601 and fetch events:**
 
-```bash
-~/workspace/claude_for_mac_local/tools/calendar_list_events.sh "MM/DD/YYYY 00:00:00" "MM/DD/YYYY 23:59:59"
+MCP tool: `calendar_list_events`
+```json
+{ "start_date": "2026-04-11T00:00:00Z", "end_date": "2026-04-18T23:59:59Z" }
 ```
+
+Returns JSON array with fields: `calendar`, `title`, `start`, `end`, `location`, `notes`, `isAllDay`.
 
 **Step 4c — Apply filters and display:**
 
+- Parse JSON response
 - Sort events by start date/time
 - Skip calendars: Birthdays, Siri Suggestions, Scheduled Reminders, Vedic Astro Events, Drik Panchang — unless explicitly requested
-- Group by calendar
+- Group by calendar and format for display:
 
 ```
-## Calendar — [date range label] — [DATE]
+## Calendar — [date range label]
 
 ### [Calendar Name]
 - **Event Title**

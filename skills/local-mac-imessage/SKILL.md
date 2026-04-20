@@ -1,80 +1,198 @@
 ---
+
 name: local-mac-imessage
-description: Send iMessages on macOS using osascript (immediate or delayed), and read recent iMessages from chat.db. Use when user asks to send an iMessage, text, or message via iMessage to a contact, phone number, or Apple ID email, OR when user asks to check/read/show recent iMessages received in the last N minutes.
+description: Send and read iMessages on macOS using the native Messages app. Supports contact lookup, confirmation, delayed sending, and reading recent messages.
 user-invocable: true
+--------------------
+
+# 📱 Local Mac iMessage Skill (Hybrid)
+
+Send iMessages via the Messages app and read recent iMessages using structured workflows + natural language reasoning.
+
 ---
 
-Send iMessages on macOS via AppleScript (osascript).
+## 🧠 When to use this skill
 
-## How to use this skill
+Use this skill when the user wants to:
 
-When invoked directly (e.g. `/local-mac-imessage`), ask the user for:
-1. **Recipient** — phone number (e.g. `1XXXXXXXXXX`) or Apple ID email
-2. **Message** — the text to send
+* Send a message via iMessage (name, phone, or email)
+* Schedule/delay a message
+* Read recent iMessages
 
-If the user has already provided the recipient and/or message in the same request, skip asking for what was already provided.
+---
 
-## Sending a message
+## 🏗️ Architecture (Current)
 
-```bash
-~/workspace/claude_for_mac_local/tools/imessage_send.sh -y "RECIPIENT" "MESSAGE_TEXT"
+All iMessage operations go through the **Python MCP server** (`mcp_server.py`) which calls the **Swift CLI binary** (`~/bin/local-mac-tool`) via subprocess.
+
+> Migration complete: `local-mpc` client and old Swift MCP server are retired. See vault: `Projects/SWIFT_CLI_MCP_MIGRATION.md`
+
+MCP tools available:
+- `imessage-read` — read recent messages (SQLite on `chat.db`)
+- `imessage-send` — send via AppleScript
+
+---
+
+## ⚙️ Execution Modes
+
+---
+
+### 📤 1. Send iMessage (Safe Workflow)
+
+Use when:
+
+* A **contact name** is provided
+* There is **ambiguity**
+* The action is **sensitive (default path)**
+
+```yaml
+type: workflow
+intent: send_imessage
+
+inputs:
+  recipient_name: string | optional
+  recipient_phone: string | optional
+  message: string
+
+steps:
+
+  - id: resolve_contact
+    tool: contacts-search          # MCP tool via Python MCP server
+    when: "{{recipient_name}} != null AND {{recipient_phone}} == null"
+
+  - id: select_contact
+    type: ai_select
+    from: "{{resolve_contact}}"
+
+  - id: confirm
+    type: user_confirm
+    message: "Send '{{message}}' to {{recipient_phone || select_contact.phone}}?"
+
+  - id: send
+    tool: imessage-send            # MCP tool via Python MCP server
+    if: "{{confirm}} == true"
 ```
 
-Replace `RECIPIENT` with the phone number or Apple ID, and `MESSAGE_TEXT` with the message.
+#### ✅ Behavior
 
-> The `-y` flag confirms the send. Without it the script runs as a dry-run and prints a preview without sending.
+* Resolves contact automatically
+* Handles multiple matches intelligently
+* **Never sends without confirmation**
 
-## Sending a message later (delayed send)
+---
 
-To schedule a message to be sent after a delay:
+### ⚡ 2. Quick Send (Direct Command)
 
-```bash
-~/workspace/claude_for_mac_local/tools/imessage_send.sh -y --delay MINUTES "RECIPIENT" "MESSAGE_TEXT"
+Use when:
+
+* User provides **explicit phone/email**
+* No ambiguity exists
+
+```yaml
+type: workflow
+intent: send_quick_message
+
+inputs:
+  recipient: string
+  message: string
+
+steps:
+
+  - id: confirm
+    type: user_confirm
+    message: "Send '{{message}}' to {{recipient}}?"
+
+  - id: send
+    tool: imessage-send            # MCP tool via Python MCP server
+    if: "{{confirm}} == true"
 ```
 
-- `--delay MINUTES` — wait N minutes before sending (integer or decimal, e.g. 5, 1.5)
-- The send runs entirely in the background — the script returns immediately
-- After the delay expires, the message is sent automatically
+#### ✅ Behavior
 
-Example: Send "hi" to `1XXXXXXXXXX` after 5 minutes:
-```bash
-~/workspace/claude_for_mac_local/tools/imessage_send.sh -y --delay 5 "1XXXXXXXXXX" "hi"
+* Confirms before sending even when recipient is explicit
+* Immediate execution after confirmation
+
+---
+
+### 📥 3. Read Recent iMessages
+
+Use MCP tool `imessage-read` directly:
+
+```yaml
+type: command
+intent: read_imessages
+tool: imessage-read               # MCP tool via Python MCP server
+inputs:
+  limit: number | optional        # default: 10
 ```
 
-**After starting a delayed send**, confirm to the user: `Scheduled: "MESSAGE_TEXT" → RECIPIENT (in N minutes)`
+#### ✅ Behavior
 
-## Sending to multiple recipients
+* Default limit = 10
+* Returns structured data → must be formatted as table
 
-Run the tool once per recipient — they are independent calls.
+---
 
-## After sending
+## 📊 Output Formatting
 
-Confirm to the user: `Sent: "MESSAGE_TEXT" → RECIPIENT`
+### For reading messages
 
-If the script errors (e.g. buddy not found, Messages not signed in), report the error clearly and suggest the user:
-- Verify the recipient is reachable via iMessage (not just SMS)
-- Ensure the Messages app is open and signed into iMessage
-- Try using the full international format for phone numbers (e.g. `+911XXXXXXXXXX`)
-
-## Checking recent iMessages
-
-When the user asks to check/read/show iMessages received in the last N minutes (e.g. "check messages since last 30 minutes"), use the tool below. If no duration is specified, default to 30 minutes:
-
-```bash
-~/workspace/claude_for_mac_local/tools/imessage_check.sh [MINUTES]
-```
-
-Replace `MINUTES` with the number of minutes the user specified (default: 30).
-
-Present results as a table:
+Always present results as:
 
 ```
 | Time | Sender | Message |
 |------|--------|---------|
-| 2026-03-21 10:42:15 | +1YYYYYYYYYY | Hello! |
-| 2026-03-21 10:43:02 | Me | Hi there |
+| 2026-03-21 10:42:15 | +919876543210 | Hello! |
 ```
 
-- If no messages found: `No iMessages in the last N minutes.`
-- Sent messages show sender as **Me**
-- If sqlite3 errors with permissions, tell the user to grant Terminal (or the app running Claude) Full Disk Access in System Settings → Privacy & Security → Full Disk Access
+* If no messages found: `No iMessages found.`
+
+---
+
+## ⚠️ Error Handling
+
+### Sending failures
+
+If sending fails:
+
+* Show clear error message
+* Suggest:
+
+  * Verify recipient supports iMessage
+  * Ensure Messages app is signed in
+  * Use international format (`+91...`)
+
+---
+
+### Reading failures (permissions)
+
+If sqlite access fails:
+
+* Ask user to grant:
+  **System Settings → Privacy & Security → Full Disk Access**
+
+---
+
+## 🧠 Decision Rules (Critical)
+
+* If **recipient name provided** → use *Safe Workflow*
+* If **explicit phone/email provided** → use *Quick Send*
+* If **reading requested** → use *Read Messages*
+
+---
+
+## 🧩 Design Principles
+
+* YAML blocks = **execution layer (deterministic)**
+* Natural language = **reasoning + interaction layer**
+* Never bypass confirmation in safe workflow
+* Prefer structured execution over ad-hoc tool calls
+
+---
+
+## 🚀 Notes
+
+* All workflows composable via MCP tool use — no shell bridge needed
+* Designed for hybrid AI + deterministic execution
+
+---

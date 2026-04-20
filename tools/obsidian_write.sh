@@ -1,9 +1,9 @@
 #!/bin/bash
-# obsidian_write.sh - Write/create an Obsidian note
+# obsidian_write.sh - Write/create an Obsidian note via Obsidian CLI
 
 set -euo pipefail
 
-OBSIDIAN_DIR="$HOME/Documents/claude_documents"
+VAULT="claude_documents"
 
 if [[ $# -lt 2 ]]; then
     echo "Usage: obsidian_write.sh <note_name> <content>"
@@ -13,17 +13,11 @@ fi
 note_name="$1"
 content="$2"
 
-# Ensure .md extension
+# Ensure .md extension for path targeting
 if [[ ! "$note_name" =~ \.md$ ]]; then
     note_name="${note_name}.md"
 fi
 
-note_path="$OBSIDIAN_DIR/$note_name"
+obsidian vault="$VAULT" create path="$note_name" content="$content" overwrite
 
-# Create parent directories if needed
-mkdir -p "$(dirname "$note_path")"
-
-# Write content (interpret escape sequences like \n)
-printf '%b\n' "$content" > "$note_path"
-
-echo "✓ Note saved: $note_path"
+echo "✓ Note saved: $note_name"
