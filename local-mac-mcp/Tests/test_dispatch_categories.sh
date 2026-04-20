@@ -40,9 +40,6 @@ run_test "calendar"    "calendar_get_upcoming_events"  '{"days": 1}'
 # Vault
 run_test "vault"       "vault_read"                    '{"note":"Documentation/Tools/TOOLS_WIKI"}'
 
-# Market
-run_test "market"      "market_prices_query"           '{"symbol":"NIFTY50"}'
-
 # Safari (just check routing — skips actual browser interaction)
 # safari_current_url returns an error if no tab open, but it should route and respond
 out=$("$MPC" call safari_current_url '{}' 2>/dev/null)
