@@ -59,6 +59,16 @@ See `MARKET_INTEL_MIGRATION.md` for details.
 
 **Claude - Build the swift binaries required for mcp tools**
 
+If this is your first local setup, use uv to prepare Python dependencies:
+
+```bash
+# Only needed when creating a brand-new project from scratch
+uv init
+
+# Required in this repo to create/sync the virtual environment from pyproject.toml
+uv sync
+```
+
 If you want to build by yourself:
 
 ```bash
