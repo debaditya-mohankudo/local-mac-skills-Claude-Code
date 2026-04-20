@@ -17,10 +17,10 @@ Open in Obsidian using that path, or read via `/local-mac-vault read "Documentat
 | /local-mac-imessage | Send or read iMessages from macOS. |
 | /local-mac-calendar | Add, remove, or list calendar events. |
 | /local-mac-network | Check ports, DNS, ping, and endpoint health. |
-| /market-intel-live-news | Get the latest RSS news digest with categories. |
-| /market-intel-live-prices | Fetch live prices for the 9 tracked tickers. |
-| /market-intel-morning-brief | Run the full start-of-day market snapshot. |
-| /market-intel-portfolio-check | Review allocation, triggers, and risk constraints. |
+| /local-mac-mail | Read recent emails from Apple Mail folders. |
+| /local-mac-contacts | Search contacts and get phone details quickly. |
+| /local-mac-time | Check current time, alarms, and timers. |
+| /local-mac-safari | Automate Safari browsing and page interaction. |
 
 | Skill Name | Purpose (1 sentence) |
 |---|---|
@@ -51,19 +51,9 @@ Open in Obsidian using that path, or read via `/local-mac-vault read "Documentat
 | /local-mac-vault | Perform unified vault read/write/search/tasks/links/session operations. |
 | /local-mac-whisper | Transcribe audio/video with whisper.cpp and output text/srt files. |
 | /local-mac-wifi | Toggle Wi-Fi and inspect current and nearby network status. |
-| /market-intel-ceasefire-reached | Check which ceasefire signals fired and the current risk level. |
-| /market-intel-evening-adr | Fetch and summarize Indian ADR moves during the evening window. |
-| /market-intel-evening-brief | Generate a full evening brief across ADR, flows, and Nifty context. |
-| /market-intel-fii-dii-check | Report daily FII/DII flows with streak and monthly totals. |
-| /market-intel-gold | Classify gold regime and recommend BUY/HOLD/TRIM-style action. |
-| /market-intel-live-news | Build a live RSS-based geopolitical + market news digest. |
-| /market-intel-live-prices | Fetch real-time prices for the 9 monitored core tickers. |
-| /market-intel-market-refresh | Refresh cached market data and append latest live quote snapshot. |
-| /market-intel-morning-brief | Produce the full morning market-intel starter brief. |
-| /market-intel-nifty-analysis | Analyze Nifty price action with flows, VIX, and expiry context. |
-| /market-intel-portfolio-check | Show allocation, triggers, dry powder, and portfolio constraints. |
-| /market-intel-query | Run historical regime-aware query analysis for custom market conditions. |
-| /market-intel-watchlist-check | Check live watchlist prices versus entry zones and patch watchlist wiki prices. |
+
+Market-intel skills have been migrated out of this repository.
+See `MARKET_INTEL_MIGRATION.md` for details.
 
 ## Building
 
