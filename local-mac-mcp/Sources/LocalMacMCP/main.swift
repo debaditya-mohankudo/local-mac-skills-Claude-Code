@@ -38,6 +38,9 @@ do {
     case "mail-list-mailboxes":
         let result = try await MailTool.listMailboxes(payload: payload)
         respond(result)
+    case "mail-compose":
+        let result = try await MailTool.composeMail(payload: payload)
+        respond(result)
 
     // MARK: iMessage
     case "imessage-send":

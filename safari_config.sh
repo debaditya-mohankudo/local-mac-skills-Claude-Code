@@ -50,4 +50,6 @@ ALLOWED_URLS=(
     "obsidian.md"
     "gold.org"
     "help.obsidian.md"
+    "runningstatus.in"
+    "ixigo.com"
 )

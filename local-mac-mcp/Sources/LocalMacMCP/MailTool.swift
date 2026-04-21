@@ -68,6 +68,42 @@ enum MailTool {
         return results
     }
 
+    static func composeMail(payload: [String: Any]) async throws -> Any {
+        guard let to = payload.string("to") else {
+            throw CLIError("Missing required field: to")
+        }
+        let subject = payload.string("subject") ?? ""
+        let body = payload.string("body") ?? ""
+
+        let escapedTo = to.replacingOccurrences(of: "\"", with: "\\\"")
+        let escapedSubject = subject.replacingOccurrences(of: "\"", with: "\\\"")
+        let escapedBody = body.replacingOccurrences(of: "\\", with: "\\\\")
+                              .replacingOccurrences(of: "\"", with: "\\\"")
+
+        let script = """
+        tell application "Mail"
+            activate
+            set newMsg to make new outgoing message with properties {subject:"\(escapedSubject)", content:"\(escapedBody)", visible:true}
+            tell newMsg
+                make new to recipient with properties {address:"\(escapedTo)"}
+            end tell
+        end tell
+        """
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        process.arguments = ["-e", script]
+        let errorPipe = Pipe()
+        process.standardError = errorPipe
+        try process.run()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else {
+            let msg = String(data: errorPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? "Unknown error"
+            throw CLIError(msg)
+        }
+        return ["status": "composed", "to": to, "subject": subject]
+    }
+
     static func listMailboxes(payload: [String: Any]) async throws -> Any {
         let dbPath = (NSHomeDirectory() as NSString).appendingPathComponent("Library/Mail/V10/MailData/Envelope Index")
         let sql = """

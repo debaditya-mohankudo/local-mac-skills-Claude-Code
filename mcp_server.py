@@ -33,6 +33,12 @@ def mail_list_mailboxes() -> dict:
     return call_swift("mail-list-mailboxes")
 
 
+@mcp.tool()
+def mail_compose(to: str, subject: str = "", body: str = "") -> dict:
+    """Open a pre-filled compose window in Mail.app. Does not send — user reviews and sends manually."""
+    return call_swift("mail-compose", {"to": to, "subject": subject, "body": body})
+
+
 # ---------------------------------------------------------------------------
 # iMessage
 # ---------------------------------------------------------------------------
