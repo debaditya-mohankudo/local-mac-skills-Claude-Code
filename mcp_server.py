@@ -28,6 +28,12 @@ def mail_read(limit: int = 20, folder: str = "INBOX") -> dict:
 
 
 @mcp.tool()
+def mail_search(query: str, folder: str = "", limit: int = 50) -> dict:
+    """Search emails by subject, sender, or preview text. Searches all folders if folder is empty."""
+    return call_swift("mail-search", {"query": query, "folder": folder, "limit": limit})
+
+
+@mcp.tool()
 def mail_list_mailboxes() -> dict:
     """List all Mail.app mailboxes."""
     return call_swift("mail-list-mailboxes")
