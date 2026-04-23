@@ -4,53 +4,54 @@ description: Put the Mac to sleep — immediately, on a timer, or after a wind-d
 user-invocable: true
 ---
 
-Sleep controls for the local Mac. Uses `pmset` for sleep and `at` for scheduling. Wind-down closes Safari, quits all apps except VSCode, turns off Wi-Fi, then sleeps.
+Sleep controls for the local Mac via the Swift MCP binary.
 
 ---
 
 ## Sleep now
 
-```bash
-~/workspace/claude_for_mac_local/tools/sleep_control.sh now
+MCP tool: `sleep_now`
+```json
+{}
 ```
 
 ## Sleep in N minutes
 
-```bash
-~/workspace/claude_for_mac_local/tools/sleep_control.sh in <MINUTES>
+MCP tool: `sleep_in`
+```json
+{ "minutes": N }
 ```
 
-Example: `sleep_control.sh in 30` — schedules sleep 30 minutes from now via `at`.
+- N must be ≥ 1 — reject zero or negative values
 
 ## Wind-down then sleep
 
-```bash
-~/workspace/claude_for_mac_local/tools/sleep_control.sh winddown [MINUTES]
+MCP tool: `sleep_winddown`
+```json
+{ "minutes": N }
 ```
 
-- MINUTES defaults to `0` (run immediately)
-- When a delay is given, the full sequence is scheduled via `at`
+- `minutes` defaults to `0` (run immediately)
 - Sequence: close all Safari windows → quit all apps except VSCode → turn off Wi-Fi → sleep
 
-## Check scheduled sleep jobs
+## Check scheduled sleep status
 
-```bash
-~/workspace/claude_for_mac_local/tools/sleep_control.sh status
+MCP tool: `sleep_status`
+```json
+{}
 ```
 
 ## Cancel scheduled sleep
 
-```bash
-~/workspace/claude_for_mac_local/tools/sleep_control.sh cancel
+MCP tool: `sleep_cancel`
+```json
+{}
 ```
-
-Cancels **all** pending `at` jobs (not just sleep ones — warn the user if that matters).
 
 ---
 
 ## Guardrails
 
-- `in` requires MINUTES ≥ 1 — rejects zero or negative values
-- `winddown` keeps VSCode and Finder alive; all other GUI apps are quit gracefully via AppleScript `quit` (not force-kill)
-- `cancel` removes all `at` jobs — tell the user this affects any other scheduled tasks too
-- Never uses `kill -9` or force-quits system processes
+- `sleep_in` requires minutes ≥ 1
+- Wind-down keeps VSCode and Finder alive; all other GUI apps are quit gracefully
+- Never force-kills system processes
