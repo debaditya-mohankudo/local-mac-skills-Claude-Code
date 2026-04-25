@@ -52,4 +52,5 @@ ALLOWED_URLS=(
     "help.obsidian.md"
     "runningstatus.in"
     "ixigo.com"
+    "amazon.in"
 )
