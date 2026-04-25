@@ -16,7 +16,7 @@ macOS automation skills and tools for Claude Code — calendar, contacts, iMessa
 
 Single **Python MCP server** (`mcp_server.py`) wraps a **Swift CLI binary** (`~/bin/local-mac-tool`) for all native macOS tool calls. Vault operations use direct filesystem reads/writes via Python (markdown files at `VAULT_PATH`). 
 
-`tools/` contains 50+ shell scripts — do not delete or move; skills reference them via absolute paths.
+`tools/` contains ~40 shell scripts — do not delete or move; skills reference them via absolute paths.
 
 ---
 
