@@ -238,7 +238,7 @@ do {
     case "icloud-list":
         let result = try await iCloudDriveTool.list(payload: payload)
         respond(result)
-    case "finder-search":
+    case "spotlight-search":
         let result = try await FinderTool.search(payload: payload)
         respond(result)
 

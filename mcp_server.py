@@ -406,11 +406,11 @@ def process_kill(pid: int) -> str:
 
 
 @mcp.tool()
-def finder_search(query: str, path: str = "") -> dict: # type: ignore
+def spotlight_search(query: str, path: str = "") -> dict: # type: ignore
     """Search files with Spotlight (mdfind)."""
     payload = {"query": query}
     if path: payload["path"] = path
-    return call_swift("finder-search", payload)
+    return call_swift("spotlight-search", payload)
 
 
 @mcp.tool()
