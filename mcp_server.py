@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent / ".env")
 
 from mcp.server.fastmcp import FastMCP
-from swift_bridge import call_swift
+from swift_bridge import call_swift # type: ignore
 
 VAULT_NAME = os.environ.get("VAULT_NAME", "claude_documents")
 VAULT_PATH = Path(os.environ.get("VAULT_PATH", Path.home() / "workspace" / "claude_documents"))
