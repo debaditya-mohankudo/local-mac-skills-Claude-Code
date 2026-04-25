@@ -57,8 +57,6 @@ See `MARKET_INTEL_MIGRATION.md` for details.
 
 ## Building
 
-**Claude - Build the swift binaries required for mcp tools**
-
 If this is your first local setup, use uv to prepare Python dependencies:
 
 ```bash
@@ -67,25 +65,17 @@ If this is your first local setup, use uv to prepare Python dependencies:
 uv sync
 ```
 
-If you want to build by yourself:
+Build and install the Swift CLI binary:
 
 ```bash
-cd local-mac-mcp
+cd local-mac-tool
 bash build.sh
 ```
 
-The release binary will be built to:
-```
-local-mac-mcp/.build/arm64-apple-macosx/release/local-mpc
-```
-
-Symlink it to the bin directory:
-```bash
-ln -sf local-mac-mcp/.build/arm64-apple-macosx/release/local-mpc bin/local-mcp
-```
+This builds `local-mac-tool` and installs it to `~/bin/local-mac-tool`.
 
 Test the build:
 ```bash
-./bin/local-mcp --version
-./bin/local-mcp call mail_list_mailboxes '{}'
+echo '{}' | ~/bin/local-mac-tool mail-list-mailboxes
+echo '{}' | ~/bin/local-mac-tool time-now
 ```

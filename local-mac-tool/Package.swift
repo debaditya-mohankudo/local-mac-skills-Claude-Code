@@ -2,7 +2,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "local-mac-mcp",
+    name: "local-mac-tool",
     platforms: [.macOS(.v14)],
     targets: [
         .executableTarget(
