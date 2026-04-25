@@ -12,3 +12,8 @@ tools/ssh_hosts.conf
 .contacts_cache
 ~/.contacts_cache
 .vscode/
+
+# Swift build artifacts
+.build/
+*.o
+*.d
