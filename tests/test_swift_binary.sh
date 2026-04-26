@@ -101,6 +101,18 @@ run_err      "notes-read: missing id returns error"       "notes-read"     '{}'
 run_err      "notes-read: unknown id returns error"       "notes-read"     '{"id":"nonexistent-id-xyz-000"}'
 
 echo ""
+echo "Podcasts"
+echo "--------"
+run_ok       "podcasts-list: returns ok"                    "podcasts-list"      '{}'
+run_contains "podcasts-list: contains title field"          "podcasts-list"      "title" '{}'
+run_ok       "podcasts-recent: default limit returns ok"    "podcasts-recent"    '{}'
+run_ok       "podcasts-recent: limit 5 returns ok"          "podcasts-recent"    '{"limit":5}'
+run_contains "podcasts-recent: contains podcast field"      "podcasts-recent"    "podcast" '{"limit":3}'
+run_ok       "podcasts-in-progress: returns ok"             "podcasts-in-progress" '{}'
+run_err      "podcasts-episodes: missing args returns error" "podcasts-episodes"  '{}'
+run_ok       "podcasts-episodes: by title returns ok"       "podcasts-episodes"  '{"podcast_title":"Bloomberg Intelligence","limit":3}'
+
+echo ""
 echo "Error handling"
 echo "--------------"
 run_err "unknown command returns error" "unknown-command-xyz" "{}"
