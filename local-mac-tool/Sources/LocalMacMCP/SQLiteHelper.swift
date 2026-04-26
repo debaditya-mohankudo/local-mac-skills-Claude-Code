@@ -62,8 +62,9 @@ enum SQLiteHelper {
 
             switch param {
             case let str as String:
-                // Pass nil as destructor to use SQLITE_TRANSIENT behavior (SQLite copies the string immediately)
-                rc = sqlite3_bind_text(stmt, paramIndex, str, -1, nil)
+                // SQLITE_TRANSIENT (-1) tells SQLite to copy the string immediately; nil is SQLITE_STATIC which causes use-after-free for Swift heap strings
+                let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+                rc = sqlite3_bind_text(stmt, paramIndex, str, -1, SQLITE_TRANSIENT)
 
             case let int as Int:
                 rc = sqlite3_bind_int64(stmt, paramIndex, Int64(int))

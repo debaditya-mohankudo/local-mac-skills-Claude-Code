@@ -247,6 +247,20 @@ do {
         let result = try await FoundationModelsTool.query(payload: payload)
         respond(result)
 
+    // MARK: Podcasts
+    case "podcasts-list":
+        let result = try await PodcastsTool.listPodcasts(payload: payload)
+        respond(result)
+    case "podcasts-episodes":
+        let result = try await PodcastsTool.listEpisodes(payload: payload)
+        respond(result)
+    case "podcasts-recent":
+        let result = try await PodcastsTool.recentEpisodes(payload: payload)
+        respond(result)
+    case "podcasts-in-progress":
+        let result = try await PodcastsTool.inProgress(payload: payload)
+        respond(result)
+
     default:
         respondError("Unknown command: \(command)")
     }

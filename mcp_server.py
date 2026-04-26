@@ -174,13 +174,13 @@ def notes_folders() -> dict:
 
 
 @mcp.tool()
-def notes_add(title: str, body: str = "", folder: str = "Claude") -> str:
+def notes_add(title: str, body: str = "", folder: str = "Notes") -> str:
     """Create a new Apple Note."""
     return call_swift("notes-add", {"title": title, "body": body, "folder": folder})
 
 
 @mcp.tool()
-def notes_delete(title: str, folder: str = "Claude") -> str:
+def notes_delete(title: str, folder: str = "Notes") -> str:
     """Delete an Apple Note by title from a folder."""
     return call_swift("notes-delete", {"title": title, "folder": folder})
 
@@ -425,6 +425,35 @@ def foundation_models_query(prompt: str, system: str = None, max_tokens: int = 2
     payload = {"prompt": prompt, "max_tokens": max_tokens}
     if system: payload["system"] = system
     return call_swift("foundation-models-query", payload)
+
+
+# ---------------------------------------------------------------------------
+# Podcasts
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+def podcasts_list() -> list:
+    """List all subscribed podcasts with episode counts."""
+    return call_swift("podcasts-list")
+
+@mcp.tool()
+def podcasts_episodes(podcast_title: str = "", podcast_uuid: str = "", limit: int = 20, unplayed: bool = False) -> list:
+    """List episodes for a podcast. Provide podcast_title (partial match) or podcast_uuid."""
+    payload: dict = {"limit": limit, "unplayed": unplayed}
+    if podcast_uuid: payload["podcast_uuid"] = podcast_uuid
+    elif podcast_title: payload["podcast_title"] = podcast_title
+    else: raise ValueError("Provide podcast_title or podcast_uuid")
+    return call_swift("podcasts-episodes", payload)
+
+@mcp.tool()
+def podcasts_recent(limit: int = 20, new_only: bool = False) -> list:
+    """List recent episodes across all podcasts. Set new_only=True for unheard episodes."""
+    return call_swift("podcasts-recent", {"limit": limit, "new_only": new_only})
+
+@mcp.tool()
+def podcasts_in_progress() -> list:
+    """List episodes that have been started but not finished (have a playhead position)."""
+    return call_swift("podcasts-in-progress")
 
 
 # ---------------------------------------------------------------------------
