@@ -113,14 +113,19 @@ run_err      "podcasts-episodes: missing args returns error" "podcasts-episodes"
 run_ok       "podcasts-episodes: by title returns ok"       "podcasts-episodes"  '{"podcast_title":"Bloomberg Intelligence","limit":3}'
 
 echo ""
+echo "Surfshark"
+echo "---------"
+run_ok       "surfshark-status: returns ok"                    "surfshark-status"  '{}'
+run_contains "surfshark-status: has connected field"           "surfshark-status"  '"connected"'  '{}'
+run_contains "surfshark-status: has connections array"         "surfshark-status"  '"connections"' '{}'
+run_contains "surfshark-status: connections have name field"   "surfshark-status"  '"name"' '{}'
+run_contains "surfshark-status: connections have state field"  "surfshark-status"  '"state"' '{}'
+run_contains "surfshark-status: connections have protocol field" "surfshark-status" '"protocol"' '{}'
+
+echo ""
 echo "Error handling"
 echo "--------------"
 run_err "unknown command returns error" "unknown-command-xyz" "{}"
-
-# Surfshark
-run_ok       "surfshark-status: returns ok"              "surfshark-status"  '{}'
-run_contains "surfshark-status: contains connected"      "surfshark-status"  "connected"  '{}'
-run_contains "surfshark-status: contains connections"    "surfshark-status"  "connections" '{}'
 
 echo ""
 echo "================================"
