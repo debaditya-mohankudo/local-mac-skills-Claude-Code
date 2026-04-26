@@ -174,13 +174,13 @@ def notes_folders() -> dict:
 
 
 @mcp.tool()
-def notes_add(title: str, body: str = "", folder: str = "Claude") -> str:
+def notes_add(title: str, body: str = "", folder: str = "Notes") -> str:
     """Create a new Apple Note."""
     return call_swift("notes-add", {"title": title, "body": body, "folder": folder})
 
 
 @mcp.tool()
-def notes_delete(title: str, folder: str = "Claude") -> str:
+def notes_delete(title: str, folder: str = "Notes") -> str:
     """Delete an Apple Note by title from a folder."""
     return call_swift("notes-delete", {"title": title, "folder": folder})
 

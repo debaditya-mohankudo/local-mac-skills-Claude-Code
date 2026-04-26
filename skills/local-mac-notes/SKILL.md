@@ -1,107 +1,77 @@
 ---
 name: local-mac-notes
-description: Use this skill when the user asks to read, list, add, create, delete, or remove Apple Notes. Restricted to the "Claude" folder only.
+description: Read notes from Apple Notes app. Use when user asks to check, read, show, or list notes from a specific folder or all notes.
 user-invocable: true
 ---
 
-Read, add, or delete Apple Notes via AppleScript. All operations are restricted to the **"Claude"** folder.
+Read notes from Apple Notes using native SQLite3 access to the Envelope Index.
 
-> Note: If you get a "folder not found" error, the folder may be named "Claud" (typo). Rename it in Notes.app → Folders sidebar, then retry.
+## How to use this skill
 
-**Step 1 — Determine the operation:**
+When invoked directly (e.g. `/local-mac-notes`), ask the user for:
+1. **Action** — list notes or read a specific note (default: list)
+2. **Folder** — which folder to list from (optional, default: all)
+3. **Limit** — how many notes to show (default: 10)
 
-Detect intent from the user's message:
-- **list** — show/list/read notes (default)
-- **add** — "add note", "create note", "save this as a note", "note this down"
-- **delete** — "delete note", "remove note"
+If the user has already provided these in the same request, skip asking for what was provided.
 
-Branch to the appropriate section below.
+## Listing notes
 
----
-
-## ADD operation
-
-**Step 2a — Extract note details:**
-
-From the user's message extract:
-- **title** (required) — first line / explicit title
-- **body** — the note content (everything after the title, or the full text if no title is given)
-
-If no explicit title, use the first sentence of the body as the title.
-
-**Step 3a — Create the note:**
-
-```bash
-~/workspace/claude_for_mac_local/tools/notes_add.sh "TITLE" "BODY"
+Call the `notes_list` MCP tool:
 ```
-
-**Step 4a — Confirm:**
-
-Output: `Added note "[title]" to Claude folder.`
-
----
-
-## DELETE operation
-
-**Step 2b — Identify what to delete:**
-
-Extract the note title or partial name from the user's message.
-
-**Step 3b — Find the note:**
-
-```bash
-~/workspace/claude_for_mac_local/tools/notes_list.sh
+notes_list(limit=10, folder="")
 ```
+- `limit` — number of recent notes to return (optional, default 20)
+- `folder` — folder name to filter by (optional, empty = all folders)
 
-Find notes whose name contains the search string (case-insensitive). If multiple matches, list them and ask the user to confirm which one. If exactly one match, proceed.
+Returns: JSON array with id, title, folder, created, modified, snippet
 
-**Step 4b — Delete the note:**
+## Reading a specific note
 
-```bash
-~/workspace/claude_for_mac_local/tools/notes_delete.sh "EXACT TITLE"
+Call the `notes_read` MCP tool:
 ```
-
-**Step 5b — Confirm:**
-
-Output: `Deleted note "[title]" from Claude folder.`
-
----
-
-## LIST operation
-
-**Step 2c — Parse list filters:**
-
-- No qualifier → list all notes (titles + date modified + body preview)
-- `search [keyword]` → filter notes whose title or body contains keyword
-- `show [title]` → show full body of a specific note
-
-**Step 3c — Fetch notes:**
-
-```bash
-~/workspace/claude_for_mac_local/tools/notes_list.sh
+notes_read(id="56836EDD-8CF8-4C55-AB77-EAA11528D1D1")
 ```
+- `id` — the CoreData identifier from `notes_list` (required)
 
-For `show [title]`, fetch the full body:
+Returns: Full plaintext body of the note
 
-```bash
-~/workspace/claude_for_mac_local/tools/notes_read.sh "TITLE"
+## Listing all folders
+
+Call the `notes_folders` MCP tool:
 ```
+notes_folders()
+```
+Returns: JSON array with folder names and note counts
 
-**Step 4c — Display:**
+## Display format
+
+**For note list:**
 
 ```
-## Notes — Claude folder — [DATE]
-
-### [Title]
-*Modified: Mon, 21 Mar 2026*
-[body preview or full body]
-
----
-
-**Total: X note(s)**
+| Title | Folder | Created | Modified | Snippet |
+|-------|--------|---------|----------|---------|
+| Meeting notes | Work | 2026-04-10 10:30 | 2026-04-11 08:45 | Discussion of Q2 roadmap... |
+| Research | Notes | 2026-04-09 14:20 | 2026-04-09 16:00 | Key findings on market trends... |
 ```
 
-Rules:
-- Show body preview (first 120 chars) for list view; full body for `show` command
-- If folder is empty: `No notes found in Claude folder.`
-- If search returns no matches: `No notes matching "[keyword]".`
+**For folder list:**
+
+```
+| Folder | Notes |
+|--------|-------|
+| Work | 5 |
+| Notes | 99 |
+| Msc Math | 30 |
+```
+
+- If no notes found: `No notes found.`
+- If specific folder not found: List all folders and ask user to pick one
+
+## Workflow: Read a specific note
+
+1. Call `notes_list` to show recent notes or notes in a folder
+2. User selects one by title or snippet
+3. Extract the `id` from that note
+4. Call `notes_read` with the `id`
+5. Display the full note body
