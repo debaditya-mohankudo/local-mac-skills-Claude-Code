@@ -457,6 +457,16 @@ def podcasts_in_progress() -> list:
 
 
 # ---------------------------------------------------------------------------
+# Surfshark VPN
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+def surfshark_status() -> dict:
+    """Get Surfshark VPN connection status — connected/disconnected, server location, protocol, DNS, and post-quantum status."""
+    return call_swift("surfshark-status")
+
+
+# ---------------------------------------------------------------------------
 # Obsidian vault — dispatcher
 # ---------------------------------------------------------------------------
 

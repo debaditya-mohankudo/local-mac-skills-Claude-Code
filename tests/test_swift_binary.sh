@@ -117,6 +117,11 @@ echo "Error handling"
 echo "--------------"
 run_err "unknown command returns error" "unknown-command-xyz" "{}"
 
+# Surfshark
+run_ok       "surfshark-status: returns ok"              "surfshark-status"  '{}'
+run_contains "surfshark-status: contains connected"      "surfshark-status"  "connected"  '{}'
+run_contains "surfshark-status: contains connections"    "surfshark-status"  "connections" '{}'
+
 echo ""
 echo "================================"
 echo "  Passed: $PASS  Failed: $FAIL"

@@ -261,6 +261,10 @@ do {
         let result = try await PodcastsTool.inProgress(payload: payload)
         respond(result)
 
+    case "surfshark-status":
+        let result = try await SurfsharkTool.status(payload: payload)
+        respond(result)
+
     default:
         respondError("Unknown command: \(command)")
     }
