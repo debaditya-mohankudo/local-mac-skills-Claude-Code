@@ -8,6 +8,30 @@ struct CLIError: Error, LocalizedError {
     var errorDescription: String? { message }
 }
 
+// MARK: - SQLiteError → CLIError mapping
+
+extension SQLiteError {
+    /// Returns a user-facing CLIError with an actionable message.
+    func asCLIError(database: String = "database") -> CLIError {
+        switch self {
+        case .dbNotFound(let path):
+            return CLIError("The \(database) was not found at: \(path)")
+        case .openFailed(let code):
+            return CLIError("Could not open the \(database) (error \(code)). It may be in use by another process.")
+        case .locked(let msg):
+            return CLIError("The \(database) is locked — another app may have it open. Close the app and retry. (\(msg))")
+        case .prepareFailed(_, let msg):
+            return CLIError("Query failed against \(database): \(msg)")
+        case .bindFailed(let i, let msg):
+            return CLIError("Failed to bind query parameter \(i) for \(database): \(msg)")
+        case .stepFailed(let msg):
+            return CLIError("Query execution failed on \(database): \(msg)")
+        case .unsupportedParamType(let t):
+            return CLIError("Unsupported query parameter type '\(t)' for \(database) query")
+        }
+    }
+}
+
 // MARK: - AnyCodable Helper (for mixed type encoding)
 
 enum AnyCodable: Codable {

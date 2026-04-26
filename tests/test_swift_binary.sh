@@ -90,6 +90,17 @@ run_ok "mail-read: inbox limit 1 returns ok"      "mail-read"           '{"limit
 run_ok "mail-search: query returns ok"            "mail-search"         '{"query":"test","limit":1,"folder":"INBOX"}'
 
 echo ""
+echo "Notes"
+echo "-----"
+run_ok       "notes-folders: returns ok"                  "notes-folders"  '{}'
+run_contains "notes-folders: contains folder name"        "notes-folders"  "ZTITLE2\|name\|Claude" '{}'
+run_ok       "notes-list: default limit returns ok"       "notes-list"     '{}'
+run_contains "notes-list: contains identifier field"      "notes-list"     "identifier" '{}'
+run_ok       "notes-list: with limit 1 returns ok"        "notes-list"     '{"limit":1}'
+run_err      "notes-read: missing id returns error"       "notes-read"     '{}'
+run_err      "notes-read: unknown id returns error"       "notes-read"     '{"id":"nonexistent-id-xyz-000"}'
+
+echo ""
 echo "Error handling"
 echo "--------------"
 run_err "unknown command returns error" "unknown-command-xyz" "{}"

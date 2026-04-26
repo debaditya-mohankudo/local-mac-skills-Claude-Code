@@ -1,6 +1,28 @@
 import Foundation
 import SQLite3
 
+enum SQLiteError: Error, CustomStringConvertible {
+    case dbNotFound(path: String)
+    case openFailed(code: Int32)
+    case prepareFailed(sql: String, message: String)
+    case bindFailed(index: Int32, message: String)
+    case unsupportedParamType(String)
+    case stepFailed(message: String)
+    case locked(message: String)
+
+    var description: String {
+        switch self {
+        case .dbNotFound(let path):       return "Database not found: \(path)"
+        case .openFailed(let code):       return "Failed to open database (SQLite error \(code))"
+        case .prepareFailed(_, let msg):  return "Query preparation failed: \(msg)"
+        case .bindFailed(let i, let msg): return "Failed to bind parameter \(i): \(msg)"
+        case .unsupportedParamType(let t): return "Unsupported parameter type: \(t)"
+        case .stepFailed(let msg):        return "Query execution failed: \(msg)"
+        case .locked(let msg):            return "Database is locked: \(msg)"
+        }
+    }
+}
+
 /// Helper to query SQLite databases safely using C API
 enum SQLiteHelper {
 
@@ -10,24 +32,15 @@ enum SQLiteHelper {
         sql: String,
         parameters: [Any]
     ) throws -> [[String: String]] {
-        // Ensure DB exists
         guard FileManager.default.fileExists(atPath: databasePath) else {
-            throw NSError(
-                domain: "SQLiteHelper",
-                code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "Database not found at \(databasePath)"]
-            )
+            throw SQLiteError.dbNotFound(path: databasePath)
         }
 
         var db: OpaquePointer?
         let openResult = sqlite3_open_v2(databasePath, &db, SQLITE_OPEN_READONLY, nil)
 
         guard openResult == SQLITE_OK, let database = db else {
-            throw NSError(
-                domain: "SQLiteHelper",
-                code: Int(openResult),
-                userInfo: [NSLocalizedDescriptionKey: "Failed to open database"]
-            )
+            throw SQLiteError.openFailed(code: openResult)
         }
 
         defer { sqlite3_close(database) }
@@ -36,12 +49,8 @@ enum SQLiteHelper {
         let prepareResult = sqlite3_prepare_v2(database, sql, -1, &statement, nil)
 
         guard prepareResult == SQLITE_OK, let stmt = statement else {
-            let errorMsg = String(cString: sqlite3_errmsg(database))
-            throw NSError(
-                domain: "SQLiteHelper",
-                code: Int(prepareResult),
-                userInfo: [NSLocalizedDescriptionKey: "Prepare failed: \(errorMsg)"]
-            )
+            let msg = String(cString: sqlite3_errmsg(database))
+            throw SQLiteError.prepareFailed(sql: sql, message: msg)
         }
 
         defer { sqlite3_finalize(stmt) }
@@ -72,20 +81,12 @@ enum SQLiteHelper {
                 rc = sqlite3_bind_null(stmt, paramIndex)
 
             default:
-                throw NSError(
-                    domain: "SQLiteHelper",
-                    code: 2,
-                    userInfo: [NSLocalizedDescriptionKey: "Unsupported parameter type: \(type(of: param))"]
-                )
+                throw SQLiteError.unsupportedParamType("\(type(of: param))")
             }
 
             guard rc == SQLITE_OK else {
-                let errorMsg = String(cString: sqlite3_errmsg(database))
-                throw NSError(
-                    domain: "SQLiteHelper",
-                    code: Int(rc),
-                    userInfo: [NSLocalizedDescriptionKey: "Bind failed at parameter \(paramIndex): \(errorMsg)"]
-                )
+                let msg = String(cString: sqlite3_errmsg(database))
+                throw SQLiteError.bindFailed(index: paramIndex, message: msg)
             }
         }
 
@@ -140,12 +141,11 @@ enum SQLiteHelper {
                 break
 
             } else {
-                let errorMsg = String(cString: sqlite3_errmsg(database))
-                throw NSError(
-                    domain: "SQLiteHelper",
-                    code: Int(stepResult),
-                    userInfo: [NSLocalizedDescriptionKey: "Step failed: \(errorMsg)"]
-                )
+                let msg = String(cString: sqlite3_errmsg(database))
+                if stepResult == SQLITE_LOCKED || stepResult == SQLITE_BUSY {
+                    throw SQLiteError.locked(message: msg)
+                }
+                throw SQLiteError.stepFailed(message: msg)
             }
         }
 

@@ -1,5 +1,4 @@
 import Foundation
-import SQLite3
 
 enum NotesTool {
 
@@ -12,19 +11,10 @@ enum NotesTool {
         let limit = payload.int("limit") ?? 20
 
         let dbPath = getDatabasePath()
-        guard FileManager.default.fileExists(atPath: dbPath) else {
-            throw CLIError("Notes database not found at \(dbPath).")
-        }
 
-        var db: OpaquePointer?
-        guard sqlite3_open_v2(dbPath, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let database = db else {
-            throw CLIError("Failed to open Notes database.")
-        }
-        defer { sqlite3_close(database) }
-
-        let folderCondition = folder.isEmpty ? "" : "AND f.ZTITLE2 LIKE '\(folder.replacingOccurrences(of: "'", with: "''"))%'"
+        let folderCondition = folder.isEmpty ? "" : "AND f.ZTITLE2 LIKE ?"
         let sql = """
-        SELECT n.Z_PK, n.ZTITLE3, f.ZTITLE2,
+        SELECT n.Z_PK, n.ZTITLE1, f.ZTITLE2,
                datetime(n.ZCREATIONDATE + 978307200, 'unixepoch'),
                datetime(n.ZMODIFICATIONDATE + 978307200, 'unixepoch'),
                n.ZSNIPPET, n.ZISPINNED, n.ZIDENTIFIER
@@ -34,31 +24,29 @@ enum NotesTool {
         ORDER BY n.ZMODIFICATIONDATE DESC
         LIMIT \(limit)
         """
-
-        var stmt: OpaquePointer?
-        guard sqlite3_prepare_v2(database, sql, -1, &stmt, nil) == SQLITE_OK, let statement = stmt else {
-            throw CLIError("Failed to prepare query.")
-        }
-        defer { sqlite3_finalize(statement) }
+        let params: [Any] = folder.isEmpty ? [] : ["\(folder)%"]
+        let rows: [[String: String]]
+        do {
+            rows = try SQLiteHelper.queryWithParams(databasePath: dbPath, sql: sql, parameters: params)
+        } catch let e as SQLiteError { throw e.asCLIError(database: "Notes") }
 
         struct NoteEntry: Encodable {
-            let id: Int64; let title: String; let folder: String?
+            let id: String; let title: String; let folder: String?
             let created: String; let modified: String
             let snippet: String; let pinned: Bool; let identifier: String
         }
 
-        var notes: [NoteEntry] = []
-        while sqlite3_step(statement) == SQLITE_ROW {
-            notes.append(NoteEntry(
-                id: sqlite3_column_int64(statement, 0),
-                title: String(cString: sqlite3_column_text(statement, 1)),
-                folder: sqlite3_column_text(statement, 2).map { String(cString: $0) },
-                created: String(cString: sqlite3_column_text(statement, 3)),
-                modified: String(cString: sqlite3_column_text(statement, 4)),
-                snippet: String(cString: sqlite3_column_text(statement, 5)),
-                pinned: sqlite3_column_int(statement, 6) != 0,
-                identifier: String(cString: sqlite3_column_text(statement, 7))
-            ))
+        let notes = rows.map { row in
+            NoteEntry(
+                id: row["Z_PK"] ?? "",
+                title: row["ZTITLE1"] ?? "",
+                folder: row["ZTITLE2"],
+                created: row["datetime(n.ZCREATIONDATE + 978307200, 'unixepoch')"] ?? "",
+                modified: row["datetime(n.ZMODIFICATIONDATE + 978307200, 'unixepoch')"] ?? "",
+                snippet: row["ZSNIPPET"] ?? "",
+                pinned: row["ZISPINNED"] == "1",
+                identifier: row["ZIDENTIFIER"] ?? ""
+            )
         }
 
         let encoder = JSONEncoder()
@@ -73,43 +61,31 @@ enum NotesTool {
         }
 
         let dbPath = getDatabasePath()
-        guard FileManager.default.fileExists(atPath: dbPath) else {
-            throw CLIError("Notes database not found.")
-        }
 
-        var db: OpaquePointer?
-        guard sqlite3_open_v2(dbPath, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let database = db else {
-            throw CLIError("Failed to open Notes database.")
-        }
-        defer { sqlite3_close(database) }
-
-        let escapedId = noteId.replacingOccurrences(of: "'", with: "''")
         let sql = """
-        SELECT n.ZTITLE3, f.ZTITLE2,
+        SELECT n.ZTITLE1, f.ZTITLE2,
                datetime(n.ZCREATIONDATE + 978307200, 'unixepoch'),
                datetime(n.ZMODIFICATIONDATE + 978307200, 'unixepoch'),
                n.ZSNIPPET
         FROM ZICCLOUDSYNCINGOBJECT n
         LEFT JOIN ZICCLOUDSYNCINGOBJECT f ON n.ZFOLDER = f.Z_PK
-        WHERE n.Z_ENT = 12 AND n.ZIDENTIFIER = '\(escapedId)' AND n.ZMARKEDFORDELETION IS NOT 1
+        WHERE n.Z_ENT = 12 AND n.ZIDENTIFIER = ? AND n.ZMARKEDFORDELETION IS NOT 1
         LIMIT 1
         """
+        let rows: [[String: String]]
+        do {
+            rows = try SQLiteHelper.queryWithParams(databasePath: dbPath, sql: sql, parameters: [noteId])
+        } catch let e as SQLiteError { throw e.asCLIError(database: "Notes") }
 
-        var stmt: OpaquePointer?
-        guard sqlite3_prepare_v2(database, sql, -1, &stmt, nil) == SQLITE_OK, let statement = stmt else {
-            throw CLIError("Failed to prepare query.")
-        }
-        defer { sqlite3_finalize(statement) }
-
-        guard sqlite3_step(statement) == SQLITE_ROW else {
+        guard let row = rows.first else {
             throw CLIError("Note not found with identifier: \(noteId)")
         }
 
-        let title = String(cString: sqlite3_column_text(statement, 0))
-        let folder = sqlite3_column_text(statement, 1).map { String(cString: $0) }
-        let created = String(cString: sqlite3_column_text(statement, 2))
-        let modified = String(cString: sqlite3_column_text(statement, 3))
-        let snippet = String(cString: sqlite3_column_text(statement, 4))
+        let title = row["ZTITLE1"] ?? ""
+        let folder = row["ZTITLE2"]
+        let created = row["datetime(n.ZCREATIONDATE + 978307200, 'unixepoch')"] ?? ""
+        let modified = row["datetime(n.ZMODIFICATIONDATE + 978307200, 'unixepoch')"] ?? ""
+        let snippet = row["ZSNIPPET"] ?? ""
 
         let bodyScript = """
         tell application "Notes"
@@ -188,15 +164,6 @@ enum NotesTool {
 
     static func listFolders(payload: [String: Any]) async throws -> Any {
         let dbPath = getDatabasePath()
-        guard FileManager.default.fileExists(atPath: dbPath) else {
-            throw CLIError("Notes database not found.")
-        }
-
-        var db: OpaquePointer?
-        guard sqlite3_open_v2(dbPath, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let database = db else {
-            throw CLIError("Failed to open Notes database.")
-        }
-        defer { sqlite3_close(database) }
 
         let sql = """
         SELECT f.Z_PK, f.ZTITLE2, COUNT(n.Z_PK)
@@ -206,21 +173,18 @@ enum NotesTool {
         WHERE f.Z_ENT = 15 AND f.ZMARKEDFORDELETION IS NOT 1
         GROUP BY f.Z_PK ORDER BY f.ZTITLE2 ASC
         """
+        let rows: [[String: String]]
+        do {
+            rows = try SQLiteHelper.queryWithParams(databasePath: dbPath, sql: sql, parameters: [])
+        } catch let e as SQLiteError { throw e.asCLIError(database: "Notes") }
 
-        var stmt: OpaquePointer?
-        guard sqlite3_prepare_v2(database, sql, -1, &stmt, nil) == SQLITE_OK, let statement = stmt else {
-            throw CLIError("Failed to prepare query.")
-        }
-        defer { sqlite3_finalize(statement) }
-
-        struct FolderEntry: Encodable { let id: Int64; let name: String; let noteCount: Int64 }
-        var folders: [FolderEntry] = []
-        while sqlite3_step(statement) == SQLITE_ROW {
-            folders.append(FolderEntry(
-                id: sqlite3_column_int64(statement, 0),
-                name: String(cString: sqlite3_column_text(statement, 1)),
-                noteCount: sqlite3_column_int64(statement, 2)
-            ))
+        struct FolderEntry: Encodable { let id: String; let name: String; let noteCount: String }
+        let folders = rows.map { row in
+            FolderEntry(
+                id: row["Z_PK"] ?? "",
+                name: row["ZTITLE2"] ?? "",
+                noteCount: row["COUNT(n.Z_PK)"] ?? "0"
+            )
         }
 
         let encoder = JSONEncoder()

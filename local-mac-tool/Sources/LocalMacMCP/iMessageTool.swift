@@ -84,7 +84,10 @@ enum iMessageTool {
             ORDER BY message.date DESC
             LIMIT ?
             """
-        let results = try SQLiteHelper.queryWithParams(databasePath: dbPath, sql: sql, parameters: [limit])
+        let results: [[String: String]]
+        do {
+            results = try SQLiteHelper.queryWithParams(databasePath: dbPath, sql: sql, parameters: [limit])
+        } catch let e as SQLiteError { throw e.asCLIError(database: "Messages") }
         return results.map { row in
             var r = row
             if (r["text"] ?? "").isEmpty, let bodyHex = r["attributedBody"], !bodyHex.isEmpty {

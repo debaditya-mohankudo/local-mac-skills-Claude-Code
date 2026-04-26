@@ -184,7 +184,10 @@ enum MailTool {
             SELECT url as name, CAST(unread_count AS TEXT) as unread, CAST(total_count AS TEXT) as total
             FROM mailboxes ORDER BY url
             """
-        let results = try SQLiteHelper.queryWithParams(databasePath: dbPath, sql: sql, parameters: [])
+        let results: [[String: String]]
+        do {
+            results = try SQLiteHelper.queryWithParams(databasePath: dbPath, sql: sql, parameters: [])
+        } catch let e as SQLiteError { throw e.asCLIError(database: "Mail") }
         if results.isEmpty { return "No mailboxes found." }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
