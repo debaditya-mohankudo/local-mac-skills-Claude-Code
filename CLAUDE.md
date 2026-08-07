@@ -15,7 +15,6 @@ Two things are held in tension on purpose. First, it's built to be shared — th
 The gates (see below) and the concept store exist for the same underlying reason: this system is meant to keep working correctly as it grows, without a human re-deriving "wait, why does it do it that way" from scratch each time. A gate encodes a rule in code so it can't be silently skipped; a concept encodes the reasoning behind a design so future changes don't undo it by accident.
 
 **Timezone:** IST (India Standard Time / Kolkata)
-**Memory domains:** `macos` (CWD default), `vault` (CWD: the vault directory)
 
 **Vault path:** set via `VAULT_PATH` in `.env` (see `.env.example`)
 **Full docs:** Vault → `Documentation/Tools/WIKI_HOME.md`
