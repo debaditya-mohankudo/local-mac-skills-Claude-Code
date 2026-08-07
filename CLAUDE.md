@@ -52,6 +52,10 @@ Skills are logic only. Vault note paths are fine; phone numbers, addresses, acco
 
 `concept_store/concepts.json` holds the non-obvious design reasoning behind this repo — why something is built the way it is, not what the code does (the code already says that). Same schema as task-framework's concept stores: `name`, `module`, `description`, `contracts`, `invariants`, `evidence`, `confidence`. Update it (via `mcp__taskfw__concept__upsert` or by hand) when a design decision would otherwise have to be re-discovered by reading code and guessing intent — e.g. the MCP tool-call gates in `src/tool_hooks.py`.
 
+## SysML Model
+
+`models/*.sysml` is a SysML v2 structural model of the foundational call path and gate mechanism (`foundation.sysml`, `system.sysml`, `gates.sysml`, `requirements.sysml`) — `part def`s for `MCPServer`/`Dispatcher`/`ToolCallGates` and its guards, plus `requirement def`s citing the exact source lines they're satisfied by. Each package carries an `@ModelProvenance` stamp (commit + modelled paths); `tests/test_model_provenance.py` fails the moment a stamped path's code changes without the model being re-read, so the model can't silently go stale. Use `/generate-sysml` to extend it as new areas warrant modelling; re-validate with the `sysml-mcp` tools after any edit.
+
 ---
 
 ## Databases
