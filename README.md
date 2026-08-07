@@ -50,6 +50,24 @@ Open in Obsidian using that path, or read via `/local-mac-vault read "Documentat
 
 Market-intel and astrology skills have been migrated out of this repository.
 
+## Gates
+
+Every `domain__action` MCP call funnels through one choke point in
+`src/dispatcher.py`, which runs pre-checks from `src/tool_hooks.py` before
+the call is allowed to execute. A blocked call raises `PermissionError` and
+is logged (`blocked=1`) to `tool_hints.sqlite`'s `mcp_tool_calls` table
+instead of running.
+
+| Gate | Blocks | Requires |
+|---|---|---|
+| Vault path containment | `vault__write`, `vault__append`, `vault__delete`, `vault__move` | Resolved target path must stay inside `VAULT_PATH` — refuses any path that escapes the vault root. |
+| iMessage recipient check | `imessage__send` | `contacts__search` must have run within the last 120s and found a matching contact. |
+| Mail delete confirmation | `mail__delete` | `mail__read` must have run within the last 120s, so a message is read before it's deleted. |
+
+The 120s window matches claude-hooks' `gate_rules.yaml` default and is scoped
+per server process (in-memory), not per calendar time — restarting the MCP
+server resets it.
+
 ## Building
 
 If this is your first local setup, use uv to prepare Python dependencies:
