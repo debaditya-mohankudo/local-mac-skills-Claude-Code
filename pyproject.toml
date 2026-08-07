@@ -1,0 +1,43 @@
+[project]
+name = "claude-for-mac-local"
+version = "0.1.0"
+description = "Local macOS skills MCP server (Swift CLI bridge + vault)"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=1.0.0",
+    "fastmcp>=0.1.0",
+    "python-dotenv>=1.0.0",
+    "pyswisseph>=2.10.0",
+    "pydantic-settings>=2.13.1",
+    "pandas>=2.3.3",
+    "anthropic>=0.104.1",
+    "llama-index-core>=0.14.22",
+    "llama-index-llms-anthropic>=0.11.4",
+    "llama-index-embeddings-voyageai>=0.6.0",
+    "llama-index-embeddings-ollama>=0.9.0",
+    "yfinance>=1.4.0",
+    "pyarrow>=15.0.0",
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.29.0",
+    "turbovec>=0.7.0",
+    "msgpack>=1.1.2",
+]
+
+[project.optional-dependencies]
+test = [
+    "deepeval>=1.0.0",
+    "pytest>=7.0.0",
+    "pytest-xdist>=3.0.0",
+    "pytest-asyncio>=0.23.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+pythonpath = ["src"]
+asyncio_mode = "auto"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]

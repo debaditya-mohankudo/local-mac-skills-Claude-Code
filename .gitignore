@@ -1,0 +1,30 @@
+.DS_Store
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+.cache/
+# .claude/ is local machine state — settings carrying absolute paths and
+# permission allowlists, a scheduled-task lock, and a full git worktree
+# (10,660 files in total). Only the skills are shareable, so ignore the
+# directory and re-admit that one subtree.
+.claude/*
+!.claude/skills/
+tools/ssh_hosts.conf
+.env
+.mcp.json
+
+# Contacts cache (global)
+.contacts_cache
+~/.contacts_cache
+.vscode/
+
+# Swift build artifacts
+.build/
+*.o
+*.d
+# Databases are never committed — they hold live personal data and a
+# committed database survives in history even after deletion.
+*.db
+*.sqlite
+*.sqlite3
