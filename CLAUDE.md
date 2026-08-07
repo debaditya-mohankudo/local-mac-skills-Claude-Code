@@ -6,6 +6,14 @@ macOS automation skills and tools for Claude Code — calendar, contacts, iMessa
 
 The astrology tools (panchang, planets, Vimshottari dasha, gochar, chart queries) were moved to a separate private repository. They read birth data for identifiable people, and that cannot live in a repository meant to be public.
 
+## Why this repo exists
+
+This is a personal Mac turned into a place Claude can act, not just answer. The point isn't any single skill — it's removing the gap between "Claude knows what to do" and "Claude did it": send the message, add the event, read the mail, check the portfolio, without the user relaying every detail by hand.
+
+Two things are held in tension on purpose. First, it's built to be shared — the README, the committed `local-mac-*` skills, the public-repo notice at the top of this file all exist so a stranger can clone this and get real macOS automation, not a stub. Second, it runs against one person's actual life — their mail, their contacts, their finances, their vault of private notes — so nothing here can leak who they are. Every architectural choice downstream (what's gitignored, what gets redacted before logging, what the gates block) is that tension resolved in one direction or the other. When in doubt, privacy wins over convenience, and reversible/logged wins over silent.
+
+The gates (see below) and the concept store exist for the same underlying reason: this system is meant to keep working correctly as it grows, without a human re-deriving "wait, why does it do it that way" from scratch each time. A gate encodes a rule in code so it can't be silently skipped; a concept encodes the reasoning behind a design so future changes don't undo it by accident.
+
 **Timezone:** IST (India Standard Time / Kolkata)
 **Memory domains:** `macos` (CWD default), `vault` (CWD: the vault directory)
 
@@ -34,11 +42,19 @@ Everything else under `.claude/` stays ignored: settings carrying absolute paths
 
 Skills are logic only. Vault note paths are fine; phone numbers, addresses, account identifiers and machine-specific paths are not — those belong in `.env`.
 
-**FastAPI memory server** (`server/`) runs on `127.0.0.1:8765` — auto-started by `mcp_server.py` at launch. Handles memory scoring, session keyword tracking, and tool-hint lookup. Self-contained: all config in `server/config.py`, docs in `server/README.md`. Stopword filtering shared via `server/stopwords.py` + `server/stopwords.json` (edit JSON to add words; takes effect on next server restart).
-
 `hooks/` contains 6 Python hooks fired by Claude Code events — `memory_loader.py` (UserPromptSubmit), `pre_tool_use.py` (PreToolUse), `stop_hook.py` + `tool_usage_logger.py` (Stop/PostToolUse). `~/.claude/hooks` is a symlink to this directory.
 
 **`sessions.db`** (`~/.claude/sessions.db`) — SQLite DB for live session state and persisted summaries. Two tables: `sessions` (per-session keywords, domains, injected memory names, state machine, turn counter, tasks) and `session_summaries` (compact snapshots saved by `session-compact-persist`, with tags).
+
+---
+
+## Concept Store
+
+`concept_store/concepts.json` holds the non-obvious design reasoning behind this repo — why something is built the way it is, not what the code does (the code already says that). Same schema as task-framework's concept stores: `name`, `module`, `description`, `contracts`, `invariants`, `evidence`, `confidence`. Update it (via `mcp__taskfw__concept__upsert` or by hand) when a design decision would otherwise have to be re-discovered by reading code and guessing intent — e.g. the MCP tool-call gates in `src/tool_hooks.py`.
+
+## SysML Model
+
+`models/*.sysml` is a SysML v2 structural model of the foundational call path and gate mechanism (`foundation.sysml`, `system.sysml`, `gates.sysml`, `requirements.sysml`) — `part def`s for `MCPServer`/`Dispatcher`/`ToolCallGates` and its guards, plus `requirement def`s citing the exact source lines they're satisfied by. Each package carries an `@ModelProvenance` stamp (commit + modelled paths); `tests/test_model_provenance.py` fails the moment a stamped path's code changes without the model being re-read, so the model can't silently go stale. Use `/generate-sysml` to extend it as new areas warrant modelling; re-validate with the `sysml-mcp` tools after any edit.
 
 ---
 
@@ -97,9 +113,6 @@ All iCloud-hosted DBs (`tool_hints.sqlite`, `vault_index.sqlite`) sync across de
 ```bash
 # Start MCP server (Claude Code does this automatically on launch)
 uv run python mcp_server.py
-
-# Restart FastAPI memory server manually
-./server/run.sh
 
 # Run tests
 uv run pytest tests/

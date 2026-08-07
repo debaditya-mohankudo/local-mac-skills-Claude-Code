@@ -33,10 +33,10 @@ _DB_PATH = cfg.tool_hints_db
 _SESSION_CALLS_MAXLEN = 100
 _SESSION_CALLS: deque[tuple[str, float, bool | None]] = deque(maxlen=_SESSION_CALLS_MAXLEN)
 
-# Gate prereqs stay valid for this many seconds, matching claude-hooks'
-# gate_rules.yaml DEFAULT_WINDOW_S — kept even though calls are now persisted
-# and technically queryable indefinitely, so "recently looked up" still means
-# recently, not "at any point since the process started" (user confirmed).
+# Gate prereqs stay valid for this many seconds. Kept even though calls are
+# now persisted and technically queryable indefinitely, so "recently looked
+# up" still means recently, not "at any point since the process started"
+# (user confirmed).
 _GATE_WINDOW_S = 120.0
 
 # Args that may carry personal data — logged as a prefix + length, never

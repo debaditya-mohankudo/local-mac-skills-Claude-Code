@@ -1,0 +1,37 @@
+{
+  "concepts": {
+    "mcp-tool-call-gates": {
+      "confidence": 0.8,
+      "contracts": [
+        "Every domain__action MCP call funnels through dispatcher.py's _wrap, which invokes tool_hooks.tool_called(domain, action, kwargs) as a context manager -- no MCP tool handler runs outside this choke point.",
+        "Prechecks run in fixed order (_vault_guard, _imessage_guard, _mail_guard) before the handler executes; each is a no-op unless its own (domain, action) matches.",
+        "A failed precheck raises PermissionError, logs the call to tool_hints.sqlite's mcp_tool_calls table with blocked=1 and a reason, and the wrapped handler never runs.",
+        "On success, tool_called yields a holder dict; the caller must set holder['result'] after invoking the handler -- that's how a later gate (e.g. imessage__send needing contacts__search's own result) sees the return value, not just that the call happened.",
+        "_FOUND_CHECKS maps (domain, action) to a function computing a bool 'found' quality flag from (kwargs, result); calls with no entry record found=None.",
+        "Successful calls are appended to the in-memory _SESSION_CALLS deque (maxlen 100) as (call_name, monotonic_ts, found); gates read this via _called_recently()/_last_found() to check prior calls within _GATE_WINDOW_S (120s)."
+      ],
+      "created_at": "2026-08-07T07:38:43.000000+00:00",
+      "description": "Host-agnostic pre/post hook mechanism around every MCP tool call, embedded in dispatcher.py's single choke point rather than relying on external Claude Code settings.json hooks (which only fire when that host's hook process is wired up). Runs pre-check 'gates' that can block a call outright, then logs every call's outcome to tool_hints.sqlite regardless of host.",
+      "evidence": [
+        "src/tool_hooks.py:_PRECHECKS",
+        "src/tool_hooks.py:tool_called",
+        "src/tool_hooks.py:_vault_guard,_imessage_guard,_mail_guard",
+        "src/tool_hooks.py:_SESSION_CALLS,_GATE_WINDOW_S",
+        "README.md#Gates"
+      ],
+      "invariants": [
+        "The 120s gate window (_GATE_WINDOW_S) is defined and owned entirely within this repo's src/tool_hooks.py -- this repo does not depend on or mirror claude-hooks' gate_rules.yaml.",
+        "_SESSION_CALLS is in-memory and per-server-process; it resets on MCP server restart even though mcp_tool_calls in tool_hints.sqlite persists indefinitely, so 'called recently' is scoped to process uptime, not wall-clock/DB history.",
+        "vault__write/append/delete/move must resolve inside VAULT_PATH or _vault_guard raises PermissionError -- this is a hard containment check, not a warning.",
+        "imessage__send requires contacts__search within the last 120s AND that search's own result to have found a match (found is not None and not False) -- a stale or empty search still blocks the send.",
+        "mail__delete requires mail__read within the last 120s -- presence of the call is sufficient, no result-quality check is registered for mail__read."
+      ],
+      "last_validated": "2026-08-07T07:41:53.000000+00:00",
+      "module": "src/tool_hooks.py",
+      "name": "mcp-tool-call-gates"
+    }
+  },
+  "meta": {
+    "updated_at": "2026-08-07T07:41:53.000000+00:00"
+  }
+}

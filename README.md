@@ -64,9 +64,9 @@ instead of running.
 | iMessage recipient check | `imessage__send` | `contacts__search` must have run within the last 120s and found a matching contact. |
 | Mail delete confirmation | `mail__delete` | `mail__read` must have run within the last 120s, so a message is read before it's deleted. |
 
-The 120s window matches claude-hooks' `gate_rules.yaml` default and is scoped
-per server process (in-memory), not per calendar time — restarting the MCP
-server resets it.
+The 120s window (`_GATE_WINDOW_S` in `src/tool_hooks.py`) is self-contained to
+this repo and scoped per server process (in-memory), not per calendar time —
+restarting the MCP server resets it.
 
 ## Building
 
