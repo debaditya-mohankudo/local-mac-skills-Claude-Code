@@ -68,6 +68,9 @@ The 120s window (`_GATE_WINDOW_S` in `src/tool_hooks.py`) is self-contained to
 this repo and scoped per server process (in-memory), not per calendar time —
 restarting the MCP server resets it.
 
+## Project Planning
+Epic planning, subtask creation, task grooming, task implementation using https://github.com/debaditya-mohankudo/Lite-Task-Framework
+
 ## Building
 
 If this is your first local setup, use uv to prepare Python dependencies:
