@@ -236,18 +236,25 @@ def handle_icloud_list(path: str = "") -> list:
 def handle_foundation_models_query(prompt: str, system: str = None, max_tokens: int = 256) -> str:
     """Query Apple Foundation Models (on-device LLM, macOS 26+) with a prompt.
 
-    KNOWN LIMITATION: the native on-device path (Apple's FoundationModels
-    Swift framework, macOS 26+) has no Python/PyObjC binding and cannot be
-    called from here — Swift's own source comments this stays Swift
-    permanently. This port only implements the HTTP fallback Swift's tool
-    also had (POST localhost:8000/api/generate); if no local server is
-    running there, this returns the same "unavailable" message Swift shows
-    on macOS < 26 with no local server, rather than silently doing nothing.
+    The native on-device path (Apple's FoundationModels Swift framework) has
+    no Python/PyObjC binding, so it stays in Swift and is reached by shelling
+    out to the local-mac-tool binary (`foundation-models-query`). If the
+    binary is missing or fails, fall back to the HTTP endpoint the Swift tool
+    also uses (POST localhost:8000/api/generate). `max_tokens` only applies
+    to the HTTP path; the native Swift call ignores it.
     """
     if not prompt:
         raise ValueError("Missing required argument: prompt")
     system_prompt = system or "You are a helpful assistant. Be concise and direct."
     endpoint = "http://localhost:8000/api/generate"
+
+    from swift_bridge import call_swift
+
+    try:
+        payload = {"prompt": prompt, "system": system_prompt, "max_tokens": max_tokens}
+        return call_swift("foundation-models-query", payload) or "Foundation Models returned no output."
+    except (RuntimeError, OSError, ValueError, subprocess.TimeoutExpired):
+        pass  # binary missing/failed: try the HTTP fallback below
 
     import json
     import urllib.request
@@ -260,7 +267,7 @@ def handle_foundation_models_query(prompt: str, system: str = None, max_tokens: 
             data = json.loads(resp.read())
             return data.get("result", "") or "Foundation Models returned no output."
     except (urllib.error.URLError, OSError, ValueError):
-        return f"*(Foundation Models LLM unavailable — macOS < 26.0 and no local server on {endpoint})*"
+        return f"*(Foundation Models LLM unavailable — native Swift call failed and no local server on {endpoint})*"
 
 
 def handle_battery_status() -> dict:
