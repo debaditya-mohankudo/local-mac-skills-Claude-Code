@@ -58,7 +58,7 @@ def _applescript_date_expr(iso_str: str, var: str) -> str:
         '''
 
 
-def handle_list_events(start_date: str, end_date: str) -> dict | str:
+def handle_list_events(start_date: str, end_date: str) -> list[dict] | str:
     """List calendar events between ISO-8601 start and end dates (YYYY-MM-DD or full ISO-8601)."""
     start_iso, end_iso = _iso(start_date), _iso(end_date)
     start_setup = _applescript_date_expr(start_iso, "startD")
