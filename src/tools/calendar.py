@@ -3,9 +3,9 @@ calendar.py
 -----------
 Two unrelated subsystems, both ported from local-mac-tool/Sources/LocalMacMCP/:
 
-1. list_events/add_event/delete_event — Calendar.app via AppleScript, ported
-   from CalendarTool.swift (which used native EventKit; AppleScript's
-   `tell application "Calendar"` covers the same CRUD ground).
+1. list_events — EventKit via PyObjC (the AppleScript version cost ~50s per
+   busy calendar and was removed). add_event/delete_event — Calendar.app via
+   AppleScript, ported from CalendarTool.swift.
 
 2. get_noise_summary — NOT Calendar.app at all. Ported from CalendarQueryTool.swift, which reads a separate
    market-intelligence SQLite DB (~/Documents/claude_cache_data/market-intel/
@@ -63,28 +63,6 @@ def _end_iso(d: str) -> str:
     return d if "T" in d else f"{d}T23:59:00Z"
 
 
-# AppleScript date -> "YYYY-MM-DDTHH:MM:SS" (locale-independent, unlike `as string`).
-_ISO_HANDLER = '''
-on isoOf(d)
-    set pad to {"00", "01", "02", "03", "04", "05", "06", "07", "08", "09"}
-    set out to (year of d as string) & "-"
-    repeat with n in {(month of d as integer), day of d, hours of d, minutes of d, seconds of d}
-        set n to n as integer
-        if n < 10 then
-            set s to item (n + 1) of pad
-        else
-            set s to n as string
-        end if
-        set out to out & s & "|"
-    end repeat
-    set AppleScript's text item delimiters to "|"
-    set parts to text items of out
-    set AppleScript's text item delimiters to ""
-    return (item 1 of parts) & "-" & (item 2 of parts) & "T" & (item 3 of parts) & ":" & (item 4 of parts) & ":" & (item 5 of parts)
-end isoOf
-'''
-
-
 def _local_dt(iso_str: str):
     from datetime import datetime
     dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
@@ -139,102 +117,12 @@ def _list_events_eventkit(start_iso: str, end_iso: str, calendar: str) -> list[d
 def handle_list_events(start_date: str, end_date: str, calendar: str = "") -> list[dict]:
     """List calendar events overlapping [start_date, end_date] (YYYY-MM-DD or full ISO-8601; a bare end date covers that whole day). Pass calendar (title or identifier, e.g. "market-watch") to query one calendar. Recurring events are expanded. Returns events sorted by start, with local ISO start/end."""
     start_iso, end_iso = _iso(start_date), _end_iso(end_date)
-    via_eventkit = _list_events_eventkit(start_iso, end_iso, calendar)
-    if via_eventkit is not None:
-        return via_eventkit
-    return _list_events_applescript(start_iso, end_iso, calendar)
-
-
-def _list_events_applescript(start_iso: str, end_iso: str, calendar: str) -> list[dict]:
-    """Fallback when EventKit full access is not granted (~50s per busy calendar)."""
-    start_setup = _applescript_date_expr(start_iso, "startD")
-    end_setup = _applescript_date_expr(end_iso, "endD")
-    cal_list = f'{{calendar "{_escape(calendar)}"}}' if calendar else "calendars"
-
-    # Performance chain found via live testing, each layer a distinct bug:
-    # 1. Naive per-item access (`repeat with e in evts: ... summary of e`)
-    #    times out even for small result sets — one Apple Event round-trip
-    #    per property per ITEM.
-    # 2. Storing a `whose`-filtered reference then bulk-fetching a property on
-    #    it (`set evts to (events of cal whose ...)` then `summary of evts`)
-    #    fails outright with "Can't get summary of {...}" (-1728).
-    # 3. Inlining the `whose` filter per property (`summary of every event of
-    #    cal whose ...`, `start date of every event of cal whose ...`, etc.)
-    #    works, but re-evaluates the filter once per PROPERTY — 6 evaluations
-    #    against a 595-event calendar ("claude", the busiest here) times out
-    #    past 120s.
-    # 4. Fix: `properties of every event of cal whose ...` fetches ALL fields
-    #    in one round-trip per calendar (measured ~44-49s for the busiest
-    #    calendar here) as a list of plain AppleScript records — records, not
-    #    app-object references, so a follow-up per-item field-access loop on
-    #    them is instant (no further Apple Events needed).
-    #
-    # Also: iterating ALL `calendars` (including Birthdays/Holidays/Scheduled
-    # Reminders/Siri Suggestions) is separately too slow regardless of the
-    # fetch strategy — those are large Apple-managed derived/subscribed
-    # calendars with years of recurring data, not real event calendars.
-    # Swift's original used EventKit's `calendars(for: .event)`, which
-    # excludes them automatically; AppleScript has no equivalent type filter,
-    # so they're excluded by substring match here (exact-name match wasn't
-    # robust enough — this account has multiple differently-named
-    # holiday/birthday calendars) to match Swift's actual scope, not to
-    # silently narrow it further. An explicit `calendar` skips all of this.
-    #
-    # Overlap (an in-progress multi-day event counts) is checked in Python on a
-    # start-date window widened 7 days back: `end date >= startD` in the
-    # `whose` clause measured 79s vs 23s on market-watch (623 events).
-    # Recurring events match only on their stored first occurrence --
-    # AppleScript does not expand recurrences the way EventKit did.
-    script = f'''
-        {_ISO_HANDLER}
-        tell application "Calendar"
-            {start_setup}
-            {end_setup}
-            set lookD to startD - (7 * days)
-            set output to ""
-            repeat with cal in {cal_list}
-                set calName to name of cal
-                if calName does not contain "Birthday" and calName does not contain "Holiday" and calName does not contain "holiday" and calName does not contain "Scheduled Reminders" and calName does not contain "Siri Suggestions" then
-                    set props to properties of every event of cal whose start date >= lookD and start date <= endD
-                    repeat with p in props
-                        set locStr to location of p
-                        if locStr is missing value then set locStr to ""
-                        set descStr to description of p
-                        if descStr is missing value then set descStr to ""
-                        set output to output & calName & (ASCII character 31) & (summary of p) & (ASCII character 31) & (my isoOf(start date of p)) & (ASCII character 31) & (my isoOf(end date of p)) & (ASCII character 31) & locStr & (ASCII character 31) & descStr & (ASCII character 31) & (allday event of p) & (ASCII character 30)
-                    end repeat
-                end if
-            end repeat
-            return output
-        end tell
-        '''
-    # 240s: even the fixed single-round-trip-per-calendar approach measured
-    # ~45-50s for this account's busiest calendar (595 events) — with several
-    # such calendars in a typical query, the realistic worst case is minutes,
-    # not seconds. This is a genuine Calendar.app AppleScript performance
-    # ceiling, not something further query restructuring fixes.
-    result = run_osascript(script, timeout=240)
-
-    entries = []
-    for record in (result or "").split(chr(30)):
-        if not record:
-            continue
-        parts = record.split(chr(31))
-        if len(parts) < 7:
-            continue
-        entries.append({
-            "calendar": parts[0],
-            "title": parts[1],
-            "start": parts[2],
-            "end": parts[3],
-            "location": parts[4] or None,
-            "notes": parts[5] or None,
-            "isAllDay": parts[6] == "true",
-        })
-    window_start = start_iso[:19]
-    entries = [e for e in entries if e["end"] >= window_start]
-    entries.sort(key=lambda e: e["start"])
-    return entries
+    events = _list_events_eventkit(start_iso, end_iso, calendar)
+    if events is None:
+        raise RuntimeError(
+            "EventKit full calendar access not granted to the process running this server "
+            "(System Settings > Privacy & Security > Calendars > Full Access)")
+    return events
 
 
 def handle_add_event(title: str, start_date: str, calendar: str = "Work",
