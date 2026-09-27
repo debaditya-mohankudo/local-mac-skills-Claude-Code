@@ -4,18 +4,23 @@
       "confidence": 0.8,
       "contracts": [
         "list_events returns events overlapping [start,end] with recurrences expanded, sorted by start, local ISO start/end, and calendarId; calendar param matches title or identifier.",
-        "Without EventKit full access (authorizationStatus != 3, including write-only 4) list_events raises RuntimeError naming the System Settings > Calendars fix; there is no slow AppleScript fallback."
+        "Without EventKit full access (authorizationStatus != 3, including write-only 4) list_events raises RuntimeError naming the System Settings > Calendars fix; there is no slow AppleScript fallback.",
+        "delete_event deletes the single event in the named calendar whose title contains the given text, starting within ±30 days of now; zero or multiple matches raise ValueError without deleting anything.",
+        "add_event/delete_event raise ValueError for an unknown calendar and RuntimeError when EventKit save/remove fails or full access is missing; writes use EKSpanThisEvent with commit=True."
       ],
       "created_at": "2026-09-27T03:51:00.979267+00:00",
-      "description": "calendar__list_events reads Calendar data through EventKit (PyObjC), not Calendar.app AppleScript; add_event/delete_event still use AppleScript.",
+      "description": "calendar__list_events, add_event and delete_event all go through EventKit (PyObjC) via one shared store/calendar lookup; Calendar.app AppleScript is no longer used for calendar data.",
       "evidence": [
         "src/tools/calendar.py:_list_events_eventkit",
-        "src/tools/calendar.py:handle_list_events"
+        "src/tools/calendar.py:handle_list_events",
+        "src/tools/calendar.py:handle_add_event",
+        "src/tools/calendar.py:handle_delete_event",
+        "src/tools/calendar.py:_require_store"
       ],
       "invariants": [
         "The TCC Calendars full-access grant belongs to the process running the MCP server, not to the code."
       ],
-      "last_validated": "2026-09-27T03:51:00.979658+00:00",
+      "last_validated": "2026-09-27T12:03:01.519036+00:00",
       "module": "src/tools/calendar.py",
       "name": "calendar-list-events-eventkit",
       "related": []
@@ -52,6 +57,6 @@
     }
   },
   "meta": {
-    "updated_at": "2026-09-27T03:51:00.979734+00:00"
+    "updated_at": "2026-09-27T12:03:01.519086+00:00"
   }
 }
