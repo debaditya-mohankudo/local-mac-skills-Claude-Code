@@ -85,9 +85,68 @@ end isoOf
 '''
 
 
+def _local_dt(iso_str: str):
+    from datetime import datetime
+    dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
+    # Callers pass wall-clock dates ("2026-09-27" -> "...T00:00:00Z"); treat
+    # them as local time, matching the AppleScript path, not as UTC.
+    return dt.replace(tzinfo=None)
+
+
+def _list_events_eventkit(start_iso: str, end_iso: str, calendar: str) -> list[dict] | None:
+    """EventKit query; None when the framework or full calendar access is unavailable.
+
+    Full access is a TCC grant on the process running this server (status 3);
+    write-only (4) hides every calendar, so it counts as unavailable too.
+    """
+    try:
+        import EventKit
+        from Foundation import NSDate
+    except ImportError:
+        return None
+    if EventKit.EKEventStore.authorizationStatusForEntityType_(EventKit.EKEntityTypeEvent) != 3:
+        return None
+    from datetime import datetime
+
+    store = EventKit.EKEventStore.alloc().init()
+    cals = list(store.calendarsForEntityType_(EventKit.EKEntityTypeEvent))
+    if calendar:
+        cals = [c for c in cals if calendar in (c.title(), c.calendarIdentifier())]
+        if not cals:
+            return []
+    start = NSDate.dateWithTimeIntervalSince1970_(_local_dt(start_iso).timestamp())
+    end = NSDate.dateWithTimeIntervalSince1970_(_local_dt(end_iso).timestamp())
+    # Overlap semantics and recurrence expansion are both native here.
+    pred = store.predicateForEventsWithStartDate_endDate_calendars_(start, end, cals)
+
+    def iso(d):
+        return datetime.fromtimestamp(d.timeIntervalSince1970()).strftime("%Y-%m-%dT%H:%M:%S")
+
+    entries = [{
+        "calendar": e.calendar().title(),
+        "calendarId": e.calendar().calendarIdentifier(),
+        "title": e.title(),
+        "start": iso(e.startDate()),
+        "end": iso(e.endDate()),
+        "location": e.location() or None,
+        "notes": e.notes() or None,
+        "isAllDay": bool(e.isAllDay()),
+    } for e in store.eventsMatchingPredicate_(pred)]
+    entries.sort(key=lambda e: e["start"])
+    return entries
+
+
 def handle_list_events(start_date: str, end_date: str, calendar: str = "") -> list[dict]:
-    """List calendar events overlapping [start_date, end_date] (YYYY-MM-DD or full ISO-8601; a bare end date covers that whole day). Pass calendar (e.g. "market-watch") to query one calendar -- much faster than scanning all. Returns events sorted by start, with ISO start/end."""
+    """List calendar events overlapping [start_date, end_date] (YYYY-MM-DD or full ISO-8601; a bare end date covers that whole day). Pass calendar (title or identifier, e.g. "market-watch") to query one calendar. Recurring events are expanded. Returns events sorted by start, with local ISO start/end."""
     start_iso, end_iso = _iso(start_date), _end_iso(end_date)
+    via_eventkit = _list_events_eventkit(start_iso, end_iso, calendar)
+    if via_eventkit is not None:
+        return via_eventkit
+    return _list_events_applescript(start_iso, end_iso, calendar)
+
+
+def _list_events_applescript(start_iso: str, end_iso: str, calendar: str) -> list[dict]:
+    """Fallback when EventKit full access is not granted (~50s per busy calendar)."""
     start_setup = _applescript_date_expr(start_iso, "startD")
     end_setup = _applescript_date_expr(end_iso, "endD")
     cal_list = f'{{calendar "{_escape(calendar)}"}}' if calendar else "calendars"

@@ -21,6 +21,7 @@ dependencies = [
     "uvicorn[standard]>=0.29.0",
     "turbovec>=0.7.0",
     "msgpack>=1.1.2",
+    "pyobjc-framework-eventkit>=12.2.2",
 ]
 
 [project.optional-dependencies]
