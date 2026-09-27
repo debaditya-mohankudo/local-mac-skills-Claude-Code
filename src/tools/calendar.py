@@ -4,8 +4,10 @@ calendar.py
 Two unrelated subsystems, both ported from local-mac-tool/Sources/LocalMacMCP/:
 
 1. list_events — EventKit via PyObjC (the AppleScript version cost ~50s per
-   busy calendar and was removed). add_event/delete_event — Calendar.app via
-   AppleScript, ported from CalendarTool.swift.
+   busy calendar and was removed). add_event/delete_event — EventKit too;
+   their AppleScript versions (from CalendarTool.swift) enumerated the
+   calendar via a `whose` query plus one Apple Event per candidate and hit
+   the 120s timeout on market-watch before ever deleting.
 
 2. get_noise_summary — NOT Calendar.app at all. Ported from CalendarQueryTool.swift, which reads a separate
    market-intelligence SQLite DB (~/Documents/claude_cache_data/market-intel/
@@ -25,36 +27,12 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from local_process import run_osascript
 
 _MARKET_DB = Path.home() / "Documents" / "claude_cache_data" / "market-intel" / "market.sqlite"
 
 
 def _iso(d: str) -> str:
     return d if "T" in d else f"{d}T00:00:00Z"
-
-
-def _escape(s: str) -> str:
-    return s.replace('"', '\\"')
-
-
-def _parse_iso_for_applescript(iso_str: str) -> tuple[int, int, int, int, int]:
-    from datetime import datetime
-    dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
-    return dt.year, dt.month, dt.day, dt.hour, dt.minute
-
-
-def _applescript_date_expr(iso_str: str, var: str) -> str:
-    y, mo, d, h, mi = _parse_iso_for_applescript(iso_str)
-    return f'''
-        set {var} to current date
-        set year of {var} to {y}
-        set month of {var} to {mo}
-        set day of {var} to {d}
-        set hours of {var} to {h}
-        set minutes of {var} to {mi}
-        set seconds of {var} to 0
-        '''
 
 
 def _end_iso(d: str) -> str:
@@ -67,62 +45,91 @@ def _local_dt(iso_str: str):
     from datetime import datetime
     dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
     # Callers pass wall-clock dates ("2026-09-27" -> "...T00:00:00Z"); treat
-    # them as local time, matching the AppleScript path, not as UTC.
+    # them as local time, not as UTC.
     return dt.replace(tzinfo=None)
 
 
-def _list_events_eventkit(start_iso: str, end_iso: str, calendar: str) -> list[dict] | None:
-    """EventKit query; None when the framework or full calendar access is unavailable.
+def _nsdate(dt):
+    from Foundation import NSDate
+    return NSDate.dateWithTimeIntervalSince1970_(dt.timestamp())
+
+
+def _ns_iso(d) -> str:
+    from datetime import datetime
+    return datetime.fromtimestamp(d.timeIntervalSince1970()).strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def _store():
+    """EventKit store with full calendar access, or None.
 
     Full access is a TCC grant on the process running this server (status 3);
     write-only (4) hides every calendar, so it counts as unavailable too.
     """
     try:
         import EventKit
-        from Foundation import NSDate
     except ImportError:
         return None
     if EventKit.EKEventStore.authorizationStatusForEntityType_(EventKit.EKEntityTypeEvent) != 3:
         return None
-    from datetime import datetime
+    return EventKit.EKEventStore.alloc().init()
 
-    store = EventKit.EKEventStore.alloc().init()
+
+def _require_store():
+    store = _store()
+    if store is None:
+        raise RuntimeError(
+            "EventKit full calendar access not granted to the process running this server "
+            "(System Settings > Privacy & Security > Calendars > Full Access)")
+    return store
+
+
+def _calendars(store, calendar: str) -> list:
+    import EventKit
     cals = list(store.calendarsForEntityType_(EventKit.EKEntityTypeEvent))
     if calendar:
         cals = [c for c in cals if calendar in (c.title(), c.calendarIdentifier())]
-        if not cals:
-            return []
-    start = NSDate.dateWithTimeIntervalSince1970_(_local_dt(start_iso).timestamp())
-    end = NSDate.dateWithTimeIntervalSince1970_(_local_dt(end_iso).timestamp())
+    return cals
+
+
+def _one_calendar(store, calendar: str):
+    cals = _calendars(store, calendar)
+    if not cals:
+        raise ValueError(f"Calendar not found: {calendar}")
+    return cals[0]
+
+
+def _events(store, start, end, cals) -> list:
     # Overlap semantics and recurrence expansion are both native here.
-    pred = store.predicateForEventsWithStartDate_endDate_calendars_(start, end, cals)
+    pred = store.predicateForEventsWithStartDate_endDate_calendars_(_nsdate(start), _nsdate(end), cals)
+    return list(store.eventsMatchingPredicate_(pred))
 
-    def iso(d):
-        return datetime.fromtimestamp(d.timeIntervalSince1970()).strftime("%Y-%m-%dT%H:%M:%S")
 
+def _list_events_eventkit(start_iso: str, end_iso: str, calendar: str) -> list[dict] | None:
+    """EventKit query; None when the framework or full calendar access is unavailable."""
+    store = _store()
+    if store is None:
+        return None
+    cals = _calendars(store, calendar)
+    if not cals:
+        return []
     entries = [{
         "calendar": e.calendar().title(),
         "calendarId": e.calendar().calendarIdentifier(),
         "title": e.title(),
-        "start": iso(e.startDate()),
-        "end": iso(e.endDate()),
+        "start": _ns_iso(e.startDate()),
+        "end": _ns_iso(e.endDate()),
         "location": e.location() or None,
         "notes": e.notes() or None,
         "isAllDay": bool(e.isAllDay()),
-    } for e in store.eventsMatchingPredicate_(pred)]
+    } for e in _events(store, _local_dt(start_iso), _local_dt(end_iso), cals)]
     entries.sort(key=lambda e: e["start"])
     return entries
 
 
 def handle_list_events(start_date: str, end_date: str, calendar: str = "") -> list[dict]:
     """List calendar events overlapping [start_date, end_date] (YYYY-MM-DD or full ISO-8601; a bare end date covers that whole day). Pass calendar (title or identifier, e.g. "market-watch") to query one calendar. Recurring events are expanded. Returns events sorted by start, with local ISO start/end."""
-    start_iso, end_iso = _iso(start_date), _end_iso(end_date)
-    events = _list_events_eventkit(start_iso, end_iso, calendar)
-    if events is None:
-        raise RuntimeError(
-            "EventKit full calendar access not granted to the process running this server "
-            "(System Settings > Privacy & Security > Calendars > Full Access)")
-    return events
+    _require_store()
+    return _list_events_eventkit(_iso(start_date), _end_iso(end_date), calendar)
 
 
 def handle_add_event(title: str, start_date: str, calendar: str = "Work",
@@ -132,78 +139,50 @@ def handle_add_event(title: str, start_date: str, calendar: str = "Work",
         raise ValueError("Missing required argument: title")
     if not start_date:
         raise ValueError("Missing required argument: start_date (ISO-8601)")
+    import EventKit
+    from datetime import timedelta
 
-    start_iso = _iso(start_date)
-    if end_date:
-        end_iso = _iso(end_date)
-    else:
-        from datetime import datetime, timedelta
-        dt = datetime.fromisoformat(start_iso.replace("Z", "+00:00")) + timedelta(hours=1)
-        end_iso = dt.isoformat()
+    store = _require_store()
+    cal = _one_calendar(store, calendar)
+    start = _local_dt(_iso(start_date))
+    end = _local_dt(_iso(end_date)) if end_date else start + timedelta(hours=1)
 
-    start_setup = _applescript_date_expr(start_iso, "startD")
-    end_setup = _applescript_date_expr(end_iso, "endD")
-    escaped_title = _escape(title)
-    escaped_cal = _escape(calendar)
-    # Calendar.app's AppleScript property is `description`, not `notes` (renamed
-    # at some point — found via live testing, `notes` errors with -1700). Must
-    # also be set as a separate statement after creation, not in the initial
-    # `make new event ... with properties {...}` record (that combination
-    # errors too, a real Calendar.app AppleScript quirk).
-    notes_set = f'set description of newEvent to "{_escape(notes)}"' if notes else ""
-
-    script = f'''
-        tell application "Calendar"
-            {start_setup}
-            {end_setup}
-            set targetCal to calendar "{escaped_cal}"
-            set newEvent to make new event at end of events of targetCal with properties {{summary:"{escaped_title}", start date:startD, end date:endD}}
-            {notes_set}
-            return (startD as string)
-        end tell
-        '''
-    result = run_osascript(script, timeout=120)
-    return f"Added '{title}' to {calendar} on {result}"
+    event = EventKit.EKEvent.eventWithEventStore_(store)
+    event.setCalendar_(cal)
+    event.setTitle_(title)
+    event.setStartDate_(_nsdate(start))
+    event.setEndDate_(_nsdate(end))
+    if notes:
+        event.setNotes_(notes)
+    ok, err = store.saveEvent_span_commit_error_(event, EventKit.EKSpanThisEvent, True, None)
+    if not ok:
+        raise RuntimeError(f"EventKit save failed: {err}")
+    return f"Added '{title}' to {calendar} on {start.isoformat()}"
 
 
 def handle_delete_event(title: str, calendar: str = "Work") -> str:
     """Delete a calendar event by title (must be unique match within ±30 days)."""
     if not title:
         raise ValueError("Missing required argument: title")
+    import EventKit
+    from datetime import datetime, timedelta
 
-    escaped_title = _escape(title)
-    escaped_cal = _escape(calendar)
-    script = f'''
-        tell application "Calendar"
-            set targetCal to calendar "{escaped_cal}"
-            set now to current date
-            set rangeStart to now - (30 * days)
-            set rangeEnd to now + (30 * days)
-            set candidates to (events of targetCal whose start date >= rangeStart and start date <= rangeEnd)
-            set matches to {{}}
-            repeat with e in candidates
-                if (summary of e) contains "{escaped_title}" then
-                    set end of matches to e
-                end if
-            end repeat
-            if (count of matches) is 0 then
-                error "No events found matching '{escaped_title}' in {escaped_cal}."
-            end if
-            if (count of matches) > 1 then
-                set names to ""
-                repeat with e in matches
-                    set names to names & (summary of e) & ", "
-                end repeat
-                error "Multiple events match '{escaped_title}': " & names & "Please be more specific."
-            end if
-            set theEvent to item 1 of matches
-            set eventName to summary of theEvent
-            delete theEvent
-            return eventName
-        end tell
-        '''
-    result = run_osascript(script, timeout=120)
-    return f"Deleted '{result}' from {calendar}."
+    store = _require_store()
+    cal = _one_calendar(store, calendar)
+    now = datetime.now()
+    matches = [e for e in _events(store, now - timedelta(days=30), now + timedelta(days=30), [cal])
+               if title in (e.title() or "")]
+    if not matches:
+        raise ValueError(f"No events found matching '{title}' in {calendar}.")
+    if len(matches) > 1:
+        names = ", ".join(e.title() for e in matches)
+        raise ValueError(f"Multiple events match '{title}': {names}. Please be more specific.")
+    event = matches[0]
+    name = event.title()
+    ok, err = store.removeEvent_span_commit_error_(event, EventKit.EKSpanThisEvent, True, None)
+    if not ok:
+        raise RuntimeError(f"EventKit remove failed: {err}")
+    return f"Deleted '{name}' from {calendar}."
 
 
 # --- Market-intel calendar (separate SQLite DB, nothing to do with Calendar.app) ---
