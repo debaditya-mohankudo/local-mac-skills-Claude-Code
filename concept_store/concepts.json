@@ -1,5 +1,25 @@
 {
   "concepts": {
+    "calendar-list-events-eventkit": {
+      "confidence": 0.8,
+      "contracts": [
+        "list_events returns events overlapping [start,end] with recurrences expanded, sorted by start, local ISO start/end, and calendarId; calendar param matches title or identifier.",
+        "Without EventKit full access (authorizationStatus != 3, including write-only 4) list_events raises RuntimeError naming the System Settings > Calendars fix; there is no slow AppleScript fallback."
+      ],
+      "created_at": "2026-09-27T03:51:00.979267+00:00",
+      "description": "calendar__list_events reads Calendar data through EventKit (PyObjC), not Calendar.app AppleScript; add_event/delete_event still use AppleScript.",
+      "evidence": [
+        "src/tools/calendar.py:_list_events_eventkit",
+        "src/tools/calendar.py:handle_list_events"
+      ],
+      "invariants": [
+        "The TCC Calendars full-access grant belongs to the process running the MCP server, not to the code."
+      ],
+      "last_validated": "2026-09-27T03:51:00.979658+00:00",
+      "module": "src/tools/calendar.py",
+      "name": "calendar-list-events-eventkit",
+      "related": []
+    },
     "mcp-tool-call-gates": {
       "confidence": 0.8,
       "contracts": [
@@ -32,6 +52,6 @@
     }
   },
   "meta": {
-    "updated_at": "2026-08-07T07:41:53.000000+00:00"
+    "updated_at": "2026-09-27T03:51:00.979734+00:00"
   }
 }
