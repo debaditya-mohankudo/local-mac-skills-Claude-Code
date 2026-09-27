@@ -7,19 +7,18 @@ Two unrelated subsystems, both ported from local-mac-tool/Sources/LocalMacMCP/:
    from CalendarTool.swift (which used native EventKit; AppleScript's
    `tell application "Calendar"` covers the same CRUD ground).
 
-2. get_events_by_date/get_upcoming_events/get_noise_summary — NOT Calendar.app
-   at all. Ported from CalendarQueryTool.swift, which reads a separate
+2. get_noise_summary — NOT Calendar.app at all. Ported from CalendarQueryTool.swift, which reads a separate
    market-intelligence SQLite DB (~/Documents/claude_cache_data/market-intel/
    market.sqlite, table `calendar`) for economic-event noise scoring
    (gold/crude/nifty/usdinr/dxy). Grooming had assumed these three would be
    Python aggregation over list_events — that assumption was wrong, caught
    by reading the actual Swift source before implementing.
 
-Known pre-existing condition (not caused by this port): market.sqlite exists
-but is a 0-byte file with no `calendar` table — these three actions already
-fail with "no such table" in the current Swift-backed implementation too.
-Ported faithfully so they work once/if that table is populated elsewhere;
-not something to fix as part of removing the Swift build.
+Known condition: market.sqlite is a 0-byte file with no `calendar` table, so
+get_noise_summary fails with "no such table". get_events_by_date and
+get_upcoming_events originally read it too; they now read Calendar.app's
+"market-watch" calendar (via list_events) instead, since that is where
+market events actually live.
 """
 from __future__ import annotations
 
@@ -58,11 +57,40 @@ def _applescript_date_expr(iso_str: str, var: str) -> str:
         '''
 
 
-def handle_list_events(start_date: str, end_date: str) -> list[dict] | str:
-    """List calendar events between ISO-8601 start and end dates (YYYY-MM-DD or full ISO-8601)."""
-    start_iso, end_iso = _iso(start_date), _iso(end_date)
+def _end_iso(d: str) -> str:
+    # A bare YYYY-MM-DD end date means "through that day", not its midnight --
+    # otherwise every event on the end day after 00:00 is silently dropped.
+    return d if "T" in d else f"{d}T23:59:00Z"
+
+
+# AppleScript date -> "YYYY-MM-DDTHH:MM:SS" (locale-independent, unlike `as string`).
+_ISO_HANDLER = '''
+on isoOf(d)
+    set pad to {"00", "01", "02", "03", "04", "05", "06", "07", "08", "09"}
+    set out to (year of d as string) & "-"
+    repeat with n in {(month of d as integer), day of d, hours of d, minutes of d, seconds of d}
+        set n to n as integer
+        if n < 10 then
+            set s to item (n + 1) of pad
+        else
+            set s to n as string
+        end if
+        set out to out & s & "|"
+    end repeat
+    set AppleScript's text item delimiters to "|"
+    set parts to text items of out
+    set AppleScript's text item delimiters to ""
+    return (item 1 of parts) & "-" & (item 2 of parts) & "T" & (item 3 of parts) & ":" & (item 4 of parts) & ":" & (item 5 of parts)
+end isoOf
+'''
+
+
+def handle_list_events(start_date: str, end_date: str, calendar: str = "") -> list[dict]:
+    """List calendar events overlapping [start_date, end_date] (YYYY-MM-DD or full ISO-8601; a bare end date covers that whole day). Pass calendar (e.g. "market-watch") to query one calendar -- much faster than scanning all. Returns events sorted by start, with ISO start/end."""
+    start_iso, end_iso = _iso(start_date), _end_iso(end_date)
     start_setup = _applescript_date_expr(start_iso, "startD")
     end_setup = _applescript_date_expr(end_iso, "endD")
+    cal_list = f'{{calendar "{_escape(calendar)}"}}' if calendar else "calendars"
 
     # Performance chain found via live testing, each layer a distinct bug:
     # 1. Naive per-item access (`repeat with e in evts: ... summary of e`)
@@ -91,22 +119,30 @@ def handle_list_events(start_date: str, end_date: str) -> list[dict] | str:
     # so they're excluded by substring match here (exact-name match wasn't
     # robust enough — this account has multiple differently-named
     # holiday/birthday calendars) to match Swift's actual scope, not to
-    # silently narrow it further.
+    # silently narrow it further. An explicit `calendar` skips all of this.
+    #
+    # Overlap (an in-progress multi-day event counts) is checked in Python on a
+    # start-date window widened 7 days back: `end date >= startD` in the
+    # `whose` clause measured 79s vs 23s on market-watch (623 events).
+    # Recurring events match only on their stored first occurrence --
+    # AppleScript does not expand recurrences the way EventKit did.
     script = f'''
+        {_ISO_HANDLER}
         tell application "Calendar"
             {start_setup}
             {end_setup}
+            set lookD to startD - (7 * days)
             set output to ""
-            repeat with cal in calendars
+            repeat with cal in {cal_list}
                 set calName to name of cal
                 if calName does not contain "Birthday" and calName does not contain "Holiday" and calName does not contain "holiday" and calName does not contain "Scheduled Reminders" and calName does not contain "Siri Suggestions" then
-                    set props to properties of every event of cal whose start date >= startD and start date <= endD
+                    set props to properties of every event of cal whose start date >= lookD and start date <= endD
                     repeat with p in props
                         set locStr to location of p
                         if locStr is missing value then set locStr to ""
                         set descStr to description of p
                         if descStr is missing value then set descStr to ""
-                        set output to output & calName & (ASCII character 31) & (summary of p) & (ASCII character 31) & ((start date of p) as string) & (ASCII character 31) & ((end date of p) as string) & (ASCII character 31) & locStr & (ASCII character 31) & descStr & (ASCII character 31) & (allday event of p) & (ASCII character 30)
+                        set output to output & calName & (ASCII character 31) & (summary of p) & (ASCII character 31) & (my isoOf(start date of p)) & (ASCII character 31) & (my isoOf(end date of p)) & (ASCII character 31) & locStr & (ASCII character 31) & descStr & (ASCII character 31) & (allday event of p) & (ASCII character 30)
                     end repeat
                 end if
             end repeat
@@ -119,11 +155,9 @@ def handle_list_events(start_date: str, end_date: str) -> list[dict] | str:
     # not seconds. This is a genuine Calendar.app AppleScript performance
     # ceiling, not something further query restructuring fixes.
     result = run_osascript(script, timeout=240)
-    if not result:
-        return f"No events found between {start_date} and {end_date}."
 
     entries = []
-    for record in result.split(chr(30)):
+    for record in (result or "").split(chr(30)):
         if not record:
             continue
         parts = record.split(chr(31))
@@ -138,7 +172,10 @@ def handle_list_events(start_date: str, end_date: str) -> list[dict] | str:
             "notes": parts[5] or None,
             "isAllDay": parts[6] == "true",
         })
-    return entries if entries else f"No events found between {start_date} and {end_date}."
+    window_start = start_iso[:19]
+    entries = [e for e in entries if e["end"] >= window_start]
+    entries.sort(key=lambda e: e["start"])
+    return entries
 
 
 def handle_add_event(title: str, start_date: str, calendar: str = "Work",
@@ -243,29 +280,6 @@ def _query_events_by_date(date_str: str) -> list[dict]:
     return _rows_to_events(rows)
 
 
-def _query_upcoming_events(days_ahead: int, from_date: str) -> list[dict]:
-    if not _MARKET_DB.exists():
-        raise FileNotFoundError(f"Database not found at {_MARKET_DB}")
-    from datetime import date, timedelta
-    start = date.fromisoformat(from_date) if from_date else date.today()
-    end = start + timedelta(days=days_ahead)
-
-    con = sqlite3.connect(f"file:{_MARKET_DB}?mode=ro", uri=True)
-    try:
-        rows = con.execute(
-            """
-            SELECT date, event_type, label, noise_level, noise_assets, notes, reference_month, confirmed
-            FROM calendar
-            WHERE date >= ? AND date <= ?
-            ORDER BY date ASC, CASE noise_level WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END
-            """,
-            (start.isoformat(), end.isoformat()),
-        ).fetchall()
-    finally:
-        con.close()
-    return _rows_to_events(rows)
-
-
 def _rows_to_events(rows) -> list[dict]:
     import json
     events = []
@@ -287,16 +301,38 @@ def _rows_to_events(rows) -> list[dict]:
     return events
 
 
-def handle_get_events_by_date(date: str) -> dict:
-    """Get market calendar events from SQLite for a specific date (YYYY-MM-DD)."""
+_NOISE_RANK = {"high": 0, "medium": 1, "low": 2}
+
+
+def _market_watch_events(start: str, end: str) -> list[dict]:
+    # market.sqlite is empty (see module docstring); the live market-event
+    # calendar is Calendar.app's "market-watch". Its generated events carry
+    # "Type: ..." / "Noise: ..." lines in their notes -- surface those.
+    events = handle_list_events(start, end, calendar="market-watch")
+    for e in events:
+        fields = {}
+        for line in (e["notes"] or "").splitlines():
+            key, sep, val = line.partition(":")
+            if sep and key.strip() in ("Type", "Noise"):
+                fields[key.strip().lower()] = val.strip()
+        e["event_type"] = fields.get("type")
+        e["noise_level"] = fields.get("noise")
+    events.sort(key=lambda e: (e["start"][:10], _NOISE_RANK.get(e["noise_level"], 3)))
+    return events
+
+
+def handle_get_events_by_date(date: str) -> list[dict]:
+    """Get market-watch calendar events (Calendar.app) on a specific date (YYYY-MM-DD), high-noise first."""
     if not date:
         raise ValueError("Missing required argument: date (YYYY-MM-DD)")
-    return _query_events_by_date(date)
+    return _market_watch_events(date, date)
 
 
-def handle_get_upcoming_events(days_ahead: int = 7, from_date: str = "") -> dict:
-    """Get upcoming market calendar events from SQLite."""
-    return _query_upcoming_events(days_ahead, from_date)
+def handle_get_upcoming_events(days_ahead: int = 7, from_date: str = "") -> list[dict]:
+    """Get market-watch calendar events (Calendar.app) from from_date (default today) through days_ahead days, by date then noise level. The 7-day ambient-context read."""
+    from datetime import date, timedelta
+    start = date.fromisoformat(from_date) if from_date else date.today()
+    return _market_watch_events(start.isoformat(), (start + timedelta(days=days_ahead)).isoformat())
 
 
 def handle_get_noise_summary(date: str) -> dict:
