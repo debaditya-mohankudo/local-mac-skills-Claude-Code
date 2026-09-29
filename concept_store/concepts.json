@@ -8,10 +8,13 @@
         "delete_event deletes the single event in the named calendar whose title contains the given text, starting within ±30 days of now; zero or multiple matches raise ValueError without deleting anything.",
         "add_event/delete_event raise ValueError for an unknown calendar and RuntimeError when EventKit save/remove fails or full access is missing; writes use EKSpanThisEvent with commit=True.",
         "list_events raises ValueError('Calendar not found: <name>') when a named calendar does not exist, instead of returning [] (a silent [] hid a blind-calendar failure).",
-        "The child relays failures as {ok:false,error_type,error}; the parent re-raises ValueError/FileNotFoundError by type and everything else as RuntimeError. A worker timeout (60s) or a missing result line raises RuntimeError."
+        "The child relays failures as {ok:false,error_type,error}; the parent re-raises ValueError/FileNotFoundError by type and everything else as RuntimeError. A worker timeout (60s) or a missing result line raises RuntimeError.",
+        "A failing worker exits 1 with a traceback on stderr and the {ok:false,...} line on stdout; the parent returns a result only when the reply is ok AND the exit code is 0. Errors are never swallowed: a missing EventKit import propagates as ImportError (not treated as 'no access'), and unparseable noise_assets JSON raises.",
+        "handle_list_events caches results in-process (_list_cache) keyed (start, end, calendar) with a 60s TTL (_CACHE_TTL_S). Only non-empty successes are stored; [] and errors are never cached ([] is what a blind calendar returned). Hits and stores are copies, since _market_watch_events mutates and sorts its list.",
+        "handle_add_event and handle_delete_event clear the whole cache before and after the write (also when it fails, since a failed write may still have changed the store)."
       ],
       "created_at": "2026-09-27T03:51:00.979267+00:00",
-      "description": "calendar__list_events, add_event and delete_event go through EventKit (PyObjC); each call runs in a short-lived child process (python -m src.tools.calendar <op>, JSON over stdin/stdout) so no EventKit state survives between calls in the long-lived MCP server. get_events_by_date / get_upcoming_events read market-watch via handle_list_events, so they use the same path.",
+      "description": "calendar__list_events, add_event and delete_event go through EventKit (PyObjC); each call runs in a short-lived child process (python -m src.tools.calendar <op>, JSON over stdin/stdout) so no EventKit state survives between calls in the long-lived MCP server. get_events_by_date / get_upcoming_events read market-watch via handle_list_events, so they use the same path and the same cache.",
       "evidence": [
         "src/tools/calendar.py:_list_events_eventkit",
         "src/tools/calendar.py:handle_list_events",
@@ -21,13 +24,16 @@
         "src/tools/calendar.py:_run_isolated",
         "src/tools/calendar.py:_worker_main",
         "src/tools/calendar.py:_do_list_events",
-        "tests/test_calendar_isolation.py"
+        "tests/test_calendar_isolation.py",
+        "src/tools/calendar.py:_list_cache",
+        "tests/test_calendar_cache.py"
       ],
       "invariants": [
         "The TCC Calendars full-access grant belongs to the process running the MCP server, not to the code.",
-        "Root cause of the server losing sight of market-watch is unproven; per-call subprocess isolation is a workaround for suspected per-process EventKit state. If blindness recurs with isolation in place, the fallback is a Swift binary per call."
+        "Root cause of the server losing sight of market-watch is unproven; per-call subprocess isolation is a workaround for suspected per-process EventKit state. If blindness recurs with isolation in place, the fallback is a Swift binary per call.",
+        "Cache staleness is bounded only by the 60s TTL for changes made outside this server (Calendar.app, iCloud, other devices); only writes through this server invalidate it. The cache is per-process, so a /mcp reconnect empties it."
       ],
-      "last_validated": "2026-09-29T23:32:12.169436+00:00",
+      "last_validated": "2026-09-29T23:50:19.561262+00:00",
       "module": "src/tools/calendar.py",
       "name": "calendar-list-events-eventkit",
       "related": []
@@ -64,6 +70,6 @@
     }
   },
   "meta": {
-    "updated_at": "2026-09-29T23:32:12.169511+00:00"
+    "updated_at": "2026-09-29T23:50:19.561333+00:00"
   }
 }
