@@ -118,9 +118,9 @@ def _events(store, start, end, cals) -> list:
     return list(store.eventsMatchingPredicate_(pred))
 
 
-def _list_events_eventkit(start_iso: str, end_iso: str, calendar: str) -> list[dict] | None:
+def _list_events_eventkit(start_iso: str, end_iso: str, calendar: str, store=None) -> list[dict] | None:
     """EventKit query; None when the framework or full calendar access is unavailable."""
-    store = _store()
+    store = store or _store()
     if store is None:
         return None
     cals = _calendars(store, calendar)
@@ -143,8 +143,8 @@ def _list_events_eventkit(start_iso: str, end_iso: str, calendar: str) -> list[d
 
 
 def _do_list_events(start_date: str, end_date: str, calendar: str = "") -> list[dict]:
-    _require_store()
-    return _list_events_eventkit(_iso(start_date), _end_iso(end_date), calendar)
+    store = _require_store()
+    return _list_events_eventkit(_iso(start_date), _end_iso(end_date), calendar, store)
 
 
 def _do_add_event(title: str, start_date: str, calendar: str = "Work",
