@@ -16,6 +16,15 @@ Two unrelated subsystems, both ported from local-mac-tool/Sources/LocalMacMCP/:
    Python aggregation over list_events — that assumption was wrong, caught
    by reading the actual Swift source before implementing.
 
+Process isolation: the long-lived MCP server process repeatedly lost sight of
+the market-watch calendar (add_event "Calendar not found", list_events silently
+[]) until reconnected, while fresh processes always saw it (task adf83977).
+Trigger unproven, so every EventKit operation now runs in a short-lived child
+(`python -m src.tools.calendar <op>`, JSON in on stdin / JSON out on stdout)
+and no EventKit state survives between calls. The `_do_*` functions are the
+in-process implementations and run only inside that child; the public
+`handle_*` functions keep their names, signatures and docstrings.
+
 Known condition: market.sqlite is a 0-byte file with no `calendar` table, so
 get_noise_summary fails with "no such table". get_events_by_date and
 get_upcoming_events originally read it too; they now read Calendar.app's
@@ -24,10 +33,15 @@ market events actually live.
 """
 from __future__ import annotations
 
+import json
+import subprocess
 import sqlite3
+import sys
 from pathlib import Path
 
 
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_WORKER_TIMEOUT_S = 60
 _MARKET_DB = Path.home() / "Documents" / "claude_cache_data" / "market-intel" / "market.sqlite"
 
 
@@ -110,8 +124,10 @@ def _list_events_eventkit(start_iso: str, end_iso: str, calendar: str) -> list[d
     if store is None:
         return None
     cals = _calendars(store, calendar)
-    if not cals:
-        return []
+    if calendar and not cals:
+        # A silent [] here is indistinguishable from "no events" and hid a
+        # blind-calendar failure behind plausible-looking data.
+        raise ValueError(f"Calendar not found: {calendar}")
     entries = [{
         "calendar": e.calendar().title(),
         "calendarId": e.calendar().calendarIdentifier(),
@@ -126,15 +142,13 @@ def _list_events_eventkit(start_iso: str, end_iso: str, calendar: str) -> list[d
     return entries
 
 
-def handle_list_events(start_date: str, end_date: str, calendar: str = "") -> list[dict]:
-    """List calendar events overlapping [start_date, end_date] (YYYY-MM-DD or full ISO-8601; a bare end date covers that whole day). Pass calendar (title or identifier, e.g. "market-watch") to query one calendar. Recurring events are expanded. Returns events sorted by start, with local ISO start/end."""
+def _do_list_events(start_date: str, end_date: str, calendar: str = "") -> list[dict]:
     _require_store()
     return _list_events_eventkit(_iso(start_date), _end_iso(end_date), calendar)
 
 
-def handle_add_event(title: str, start_date: str, calendar: str = "Work",
-                     end_date: str = None, notes: str = None) -> str:
-    """Add a calendar event."""
+def _do_add_event(title: str, start_date: str, calendar: str = "Work",
+                  end_date: str = None, notes: str = None) -> str:
     if not title:
         raise ValueError("Missing required argument: title")
     if not start_date:
@@ -160,8 +174,7 @@ def handle_add_event(title: str, start_date: str, calendar: str = "Work",
     return f"Added '{title}' to {calendar} on {start.isoformat()}"
 
 
-def handle_delete_event(title: str, calendar: str = "Work") -> str:
-    """Delete a calendar event by title (must be unique match within ±30 days)."""
+def _do_delete_event(title: str, calendar: str = "Work") -> str:
     if not title:
         raise ValueError("Missing required argument: title")
     import EventKit
@@ -183,6 +196,67 @@ def handle_delete_event(title: str, calendar: str = "Work") -> str:
     if not ok:
         raise RuntimeError(f"EventKit remove failed: {err}")
     return f"Deleted '{name}' from {calendar}."
+
+
+# --- Process isolation: every EventKit call runs in a fresh child process ---
+
+def _run_isolated(op: str, **kwargs):
+    """Run `_do_<op>` in a short-lived child and return its result, re-raising its error type.
+
+    The child inherits the TCC "responsible process" of this server, so the
+    Calendars full-access grant applies unchanged.
+    """
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-m", "src.tools.calendar", op],
+            input=json.dumps(kwargs), capture_output=True, text=True,
+            timeout=_WORKER_TIMEOUT_S, cwd=_REPO_ROOT,
+        )
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(f"calendar {op} timed out after {_WORKER_TIMEOUT_S}s in EventKit worker")
+    lines = proc.stdout.strip().splitlines()
+    try:
+        reply = json.loads(lines[-1])
+    except (IndexError, json.JSONDecodeError):
+        raise RuntimeError(
+            f"calendar {op} worker produced no result (exit {proc.returncode}): "
+            f"{proc.stderr.strip()[-500:] or 'no stderr'}")
+    if reply["ok"]:
+        return reply["result"]
+    err_type = {"ValueError": ValueError, "FileNotFoundError": FileNotFoundError}.get(
+        reply["error_type"], RuntimeError)
+    raise err_type(reply["error"])
+
+
+def _worker_main(argv: list[str]) -> int:
+    op = argv[0]
+    fn = {"list_events": _do_list_events, "add_event": _do_add_event,
+          "delete_event": _do_delete_event}.get(op)
+    try:
+        if fn is None:
+            raise ValueError(f"Unknown calendar worker op: {op}")
+        reply = {"ok": True, "result": fn(**json.loads(sys.stdin.read() or "{}"))}
+    except Exception as e:  # relayed to the parent, which re-raises by type
+        reply = {"ok": False, "error_type": type(e).__name__, "error": str(e)}
+    print(json.dumps(reply))
+    return 0
+
+
+def handle_list_events(start_date: str, end_date: str, calendar: str = "") -> list[dict]:
+    """List calendar events overlapping [start_date, end_date] (YYYY-MM-DD or full ISO-8601; a bare end date covers that whole day). Pass calendar (title or identifier, e.g. "market-watch") to query one calendar. Recurring events are expanded. Returns events sorted by start, with local ISO start/end."""
+    return _run_isolated("list_events", start_date=start_date, end_date=end_date, calendar=calendar)
+
+
+def handle_add_event(title: str, start_date: str, calendar: str = "Work",
+                     end_date: str = None, notes: str = None) -> str:
+    """Add a calendar event."""
+    return _run_isolated("add_event", title=title, start_date=start_date, calendar=calendar,
+                         end_date=end_date, notes=notes)
+
+
+def handle_delete_event(title: str, calendar: str = "Work") -> str:
+    """Delete a calendar event by title (must be unique match within ±30 days)."""
+    return _run_isolated("delete_event", title=title, calendar=calendar)
 
 
 # --- Market-intel calendar (separate SQLite DB, nothing to do with Calendar.app) ---
@@ -285,3 +359,7 @@ def handle_get_noise_summary(date: str) -> dict:
         "noise_assets": noise_scores,
         "events": events,
     }
+
+
+if __name__ == "__main__":
+    sys.exit(_worker_main(sys.argv[1:]))
