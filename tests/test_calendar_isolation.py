@@ -67,6 +67,6 @@ def test_list_events_raises_on_unknown_calendar(monkeypatch):
 
 def test_unknown_op_in_worker_is_reported(monkeypatch, capsys):
     monkeypatch.setattr(cal.sys, "stdin", type("S", (), {"read": lambda self: "{}"})())
-    cal._worker_main(["bogus"])
+    assert cal._worker_main(["bogus"]) == 1
     reply = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
     assert reply == {"ok": False, "error_type": "ValueError", "error": "Unknown calendar worker op: bogus"}

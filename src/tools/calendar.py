@@ -37,6 +37,7 @@ import json
 import subprocess
 import sqlite3
 import sys
+import traceback
 from pathlib import Path
 
 
@@ -79,10 +80,7 @@ def _store():
     Full access is a TCC grant on the process running this server (status 3);
     write-only (4) hides every calendar, so it counts as unavailable too.
     """
-    try:
-        import EventKit
-    except ImportError:
-        return None
+    import EventKit  # ImportError propagates: a missing framework is not "no access"
     if EventKit.EKEventStore.authorizationStatusForEntityType_(EventKit.EKEntityTypeEvent) != 3:
         return None
     return EventKit.EKEventStore.alloc().init()
@@ -221,7 +219,7 @@ def _run_isolated(op: str, **kwargs):
         raise RuntimeError(
             f"calendar {op} worker produced no result (exit {proc.returncode}): "
             f"{proc.stderr.strip()[-500:] or 'no stderr'}")
-    if reply["ok"]:
+    if reply["ok"] and proc.returncode == 0:
         return reply["result"]
     err_type = {"ValueError": ValueError, "FileNotFoundError": FileNotFoundError}.get(
         reply["error_type"], RuntimeError)
@@ -238,6 +236,9 @@ def _worker_main(argv: list[str]) -> int:
         reply = {"ok": True, "result": fn(**json.loads(sys.stdin.read() or "{}"))}
     except Exception as e:  # relayed to the parent, which re-raises by type
         reply = {"ok": False, "error_type": type(e).__name__, "error": str(e)}
+        traceback.print_exc()
+        print(json.dumps(reply))
+        return 1  # non-zero exit: an error must never look like success
     print(json.dumps(reply))
     return 0
 
@@ -284,10 +285,7 @@ def _rows_to_events(rows) -> list[dict]:
     import json
     events = []
     for date, event_type, label, noise_level, noise_assets_str, notes, reference_month, confirmed in rows:
-        try:
-            noise_assets = json.loads(noise_assets_str) if noise_assets_str else []
-        except json.JSONDecodeError:
-            noise_assets = []
+        noise_assets = json.loads(noise_assets_str) if noise_assets_str else []
         events.append({
             "date": date,
             "event_type": event_type,
