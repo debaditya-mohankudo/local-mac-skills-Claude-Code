@@ -70,3 +70,83 @@ def test_unknown_op_in_worker_is_reported(monkeypatch, capsys):
     assert cal._worker_main(["bogus"]) == 1
     reply = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
     assert reply == {"ok": False, "error_type": "ValueError", "error": "Unknown calendar worker op: bogus"}
+
+
+# --- list_events cache (60s TTL, non-empty only, cleared by writes) ---
+
+@pytest.fixture
+def cached(monkeypatch):
+    """Stub the worker, count its calls, and drive the cache clock by hand."""
+    cal._list_cache.clear()
+    calls, clock = [], [1000.0]
+
+    def fake_isolated(op, **kw):
+        calls.append(op)
+        return fake_isolated.reply
+
+    fake_isolated.reply = [{"title": "x", "start": "s"}]
+    monkeypatch.setattr(cal, "_run_isolated", fake_isolated)
+    monkeypatch.setattr(cal.time, "monotonic", lambda: clock[0])
+    yield calls, clock, fake_isolated
+    cal._list_cache.clear()
+
+
+def _list():
+    return cal.handle_list_events("2026-10-01", "2026-10-02", "market-watch")
+
+
+def test_list_cache_hit_within_ttl_then_miss_after(cached):
+    calls, clock, _ = cached
+    _list()
+    clock[0] += cal._CACHE_TTL_S - 1
+    _list()
+    assert calls == ["list_events"]
+    clock[0] += 2
+    _list()
+    assert calls == ["list_events", "list_events"]
+
+
+def test_list_cache_returns_copies(cached):
+    _list()[0]["title"] = "mutated"
+    assert _list()[0]["title"] == "x"
+
+
+def test_list_cache_keyed_by_args(cached):
+    calls, _, _ = cached
+    _list()
+    cal.handle_list_events("2026-10-01", "2026-10-02", "other")
+    assert len(calls) == 2
+
+
+def test_list_cache_never_stores_empty(cached):
+    calls, _, fake = cached
+    fake.reply = []
+    _list()
+    _list()
+    assert calls == ["list_events", "list_events"]
+    assert not cal._list_cache
+
+
+@pytest.mark.parametrize("write", [
+    lambda: cal.handle_add_event("t", "2026-10-01", "market-watch"),
+    lambda: cal.handle_delete_event("t", "market-watch"),
+])
+def test_writes_clear_list_cache(cached, write):
+    calls, _, _ = cached
+    _list()
+    write()
+    calls.clear()
+    _list()
+    assert calls == ["list_events"]
+
+
+def test_failed_write_still_clears_list_cache(cached, monkeypatch):
+    _list()
+
+    def boom(op, **kw):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(cal, "_run_isolated", boom)
+    with pytest.raises(RuntimeError):
+        cal.handle_add_event("t", "2026-10-01")
+    assert not cal._list_cache
