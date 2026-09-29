@@ -48,7 +48,7 @@ def test_worker_timeout_is_a_runtimeerror(monkeypatch):
 
 def test_public_handlers_dispatch_to_isolated_worker(monkeypatch):
     seen = []
-    monkeypatch.setattr(cal, "_run_isolated", lambda op, **kw: seen.append((op, kw)) or "ok")
+    monkeypatch.setattr(cal, "_run_isolated", lambda op, **kw: seen.append((op, kw)) or ([{"title": "x"}] if op == "list_events" else "ok"))
     cal.handle_list_events("2026-10-01", "2026-10-02", calendar="market-watch")
     cal.handle_add_event("t", "2026-10-01T10:00:00", calendar="market-watch")
     cal.handle_delete_event("t", calendar="market-watch")

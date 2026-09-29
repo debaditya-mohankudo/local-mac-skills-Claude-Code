@@ -37,12 +37,21 @@ import json
 import subprocess
 import sqlite3
 import sys
+import time
 import traceback
 from pathlib import Path
 
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _WORKER_TIMEOUT_S = 60
+
+# list_events results, keyed (start, end, calendar). Bounded staleness: entries
+# expire after _CACHE_TTL_S, and add/delete clear everything. Only non-empty
+# successes are stored -- [] is what a blind calendar returned, so it is never
+# remembered. Changes made outside this server (Calendar.app, iCloud) are
+# visible only after the TTL.
+_CACHE_TTL_S = 60
+_list_cache: dict[tuple, tuple[float, list[dict]]] = {}
 _MARKET_DB = Path.home() / "Documents" / "claude_cache_data" / "market-intel" / "market.sqlite"
 
 
@@ -245,19 +254,34 @@ def _worker_main(argv: list[str]) -> int:
 
 def handle_list_events(start_date: str, end_date: str, calendar: str = "") -> list[dict]:
     """List calendar events overlapping [start_date, end_date] (YYYY-MM-DD or full ISO-8601; a bare end date covers that whole day). Pass calendar (title or identifier, e.g. "market-watch") to query one calendar. Recurring events are expanded. Returns events sorted by start, with local ISO start/end."""
-    return _run_isolated("list_events", start_date=start_date, end_date=end_date, calendar=calendar)
+    key = (start_date, end_date, calendar)
+    hit = _list_cache.get(key)
+    if hit and time.monotonic() - hit[0] < _CACHE_TTL_S:
+        return [dict(e) for e in hit[1]]  # copies: _market_watch_events mutates and sorts its list
+    events = _run_isolated("list_events", start_date=start_date, end_date=end_date, calendar=calendar)
+    if events:
+        _list_cache[key] = (time.monotonic(), [dict(e) for e in events])
+    return events
 
 
 def handle_add_event(title: str, start_date: str, calendar: str = "Work",
                      end_date: str = None, notes: str = None) -> str:
     """Add a calendar event."""
-    return _run_isolated("add_event", title=title, start_date=start_date, calendar=calendar,
-                         end_date=end_date, notes=notes)
+    _list_cache.clear()  # cleared before and after: a failed write may still have changed the store
+    try:
+        return _run_isolated("add_event", title=title, start_date=start_date, calendar=calendar,
+                             end_date=end_date, notes=notes)
+    finally:
+        _list_cache.clear()
 
 
 def handle_delete_event(title: str, calendar: str = "Work") -> str:
     """Delete a calendar event by title (must be unique match within ±30 days)."""
-    return _run_isolated("delete_event", title=title, calendar=calendar)
+    _list_cache.clear()
+    try:
+        return _run_isolated("delete_event", title=title, calendar=calendar)
+    finally:
+        _list_cache.clear()
 
 
 # --- Market-intel calendar (separate SQLite DB, nothing to do with Calendar.app) ---
