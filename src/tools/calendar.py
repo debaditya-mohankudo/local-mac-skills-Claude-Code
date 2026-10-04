@@ -181,19 +181,21 @@ def _do_add_event(title: str, start_date: str, calendar: str = "Work",
     return f"Added '{title}' to {calendar} on {start.isoformat()}"
 
 
-def _do_delete_event(title: str, calendar: str = "Work") -> str:
+def _do_delete_event(title: str, calendar: str = "Work", days: int = 30) -> str:
     if not title:
         raise ValueError("Missing required argument: title")
+    if days < 1:
+        raise ValueError("days must be >= 1")
     import EventKit
     from datetime import datetime, timedelta
 
     store = _require_store()
     cal = _one_calendar(store, calendar)
     now = datetime.now()
-    matches = [e for e in _events(store, now - timedelta(days=30), now + timedelta(days=30), [cal])
+    matches = [e for e in _events(store, now - timedelta(days=days), now + timedelta(days=days), [cal])
                if title in (e.title() or "")]
     if not matches:
-        raise ValueError(f"No events found matching '{title}' in {calendar}.")
+        raise ValueError(f"No events found matching '{title}' in {calendar} within ±{days} days.")
     if len(matches) > 1:
         names = ", ".join(e.title() for e in matches)
         raise ValueError(f"Multiple events match '{title}': {names}. Please be more specific.")
@@ -275,11 +277,11 @@ def handle_add_event(title: str, start_date: str, calendar: str = "Work",
         _list_cache.clear()
 
 
-def handle_delete_event(title: str, calendar: str = "Work") -> str:
-    """Delete a calendar event by title (must be unique match within ±30 days)."""
+def handle_delete_event(title: str, calendar: str = "Work", days: int = 30) -> str:
+    """Delete a calendar event by title (must be a unique match within ±days of now, default 30)."""
     _list_cache.clear()
     try:
-        return _run_isolated("delete_event", title=title, calendar=calendar)
+        return _run_isolated("delete_event", title=title, calendar=calendar, days=days)
     finally:
         _list_cache.clear()
 
