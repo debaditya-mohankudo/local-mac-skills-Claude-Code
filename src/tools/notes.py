@@ -1,4 +1,5 @@
 """Notes tools — AppleScript bridge for Apple Notes."""
+import html
 import subprocess
 
 
@@ -154,6 +155,62 @@ end tell
         "id": cols[0] if cols else "",
         "title": cols[1] if len(cols) > 1 else title,
         "folder": folder,
+    }
+
+
+def handle_update(id: str, body: str, mode: str = "replace", title: str = "") -> dict:
+    """Edit an existing Apple Note in place, by id (from notes__add / notes__list / notes__read).
+
+    body is HTML, as in notes__add. mode "replace" swaps everything below the
+    title line (the existing title is kept unless title is given); mode
+    "append" adds body after the existing content. A password-locked note
+    cannot be edited: unlock it in Notes first.
+    """
+    if mode not in ("replace", "append"):
+        return {"error": f"mode must be 'replace' or 'append', got {mode!r}"}
+    escaped_id = id.replace("\\", "\\\\").replace('"', '\\"')
+    probe = f"""
+tell application "Notes"
+    try
+        set n to note id "{escaped_id}"
+    on error
+        return "NOTFOUND"
+    end try
+    if password protected of n then return "LOCKED"
+    return "OK|||" & (name of n)
+end tell
+"""
+    raw = _run_applescript(probe)
+    if raw == "NOTFOUND":
+        return {"error": f"Note not found: {id}"}
+    if raw == "LOCKED":
+        return {"error": "Note is locked; unlock it in Notes before editing", "id": id}
+    existing_title = raw.split("|||", 1)[1] if "|||" in raw else ""
+
+    if mode == "replace":
+        # A note's title is its first line, so setting the body would retitle
+        # it from the new content. Re-emit the title line to keep it stable.
+        heading = html.escape(title or existing_title)
+        new_body = f"<div>{heading}</div>{body}"
+        assignment = "set body of n to"
+    else:
+        new_body = body
+        assignment = "set body of n to (body of n) &"
+    escaped_body = new_body.replace("\\", "\\\\").replace('"', '\\"')
+    script = f"""
+tell application "Notes"
+    set n to note id "{escaped_id}"
+    {assignment} "{escaped_body}"
+    return (id of n) & "|||" & (name of n)
+end tell
+"""
+    out = _run_applescript(script)
+    cols = out.split("|||", 1)
+    return {
+        "status": "updated",
+        "mode": mode,
+        "id": cols[0] if cols else id,
+        "title": cols[1] if len(cols) > 1 else (title or existing_title),
     }
 
 
