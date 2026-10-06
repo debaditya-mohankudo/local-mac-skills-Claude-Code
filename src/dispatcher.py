@@ -34,7 +34,7 @@ DOMAIN_MAP = {
     "calendar":  ("tools.calendar",   ["list_events", "add_event", "delete_event",
                                        "get_events_by_date", "get_upcoming_events",
                                        "get_noise_summary"]),
-    "reminders": ("tools.reminders",  ["list", "create", "complete", "delete"]),
+    "reminders": ("tools.reminders",  ["lists", "list", "create", "update", "complete", "delete"]),
     "notes":     ("tools.notes",      ["list", "read", "folders", "add", "delete"]),
     "music":     ("tools.music",      ["play", "pause", "next", "previous", "now_playing",
                                        "volume", "search_play", "list_playlists",

@@ -4,7 +4,7 @@ reminders.py
 MCP tool handlers for Reminders.app via AppleScript, ported from
 local-mac-tool/Sources/LocalMacMCP/RemindersTool.swift (which used native
 EventKit — AppleScript's `tell application "Reminders"` covers the same
-ground for list/create/complete/delete, referencing reminders by their
+ground for list/create/update/complete/delete (plus `lists`), referencing reminders by their
 AppleScript `id` property, which is stable like EventKit's
 calendarItemIdentifier).
 
@@ -39,6 +39,53 @@ def _escape(s: str) -> str:
 
 def _missing(s: str) -> str | None:
     return None if s in ("", "missing value") else s
+
+
+def _due_date_script(due_date: str, var: str) -> str:
+    """AppleScript setting `var`'s due date. Built via `current date` plus
+    explicit component assignment rather than an ISO string literal
+    (locale-fragile); day is reset to 1 first so e.g. a 31st `current date`
+    can't overflow when the month is set."""
+    from datetime import datetime
+    try:
+        dt = datetime.fromisoformat(due_date.replace("Z", "+00:00"))
+    except ValueError:
+        raise ValueError("Invalid due_date format. Use ISO-8601, e.g. 2026-04-11T09:00:00")
+    return f'''
+            set dueD to current date
+            set day of dueD to 1
+            set year of dueD to {dt.year}
+            set month of dueD to {dt.month}
+            set day of dueD to {dt.day}
+            set hours of dueD to {dt.hour}
+            set minutes of dueD to {dt.minute}
+            set seconds of dueD to 0
+            set due date of {var} to dueD
+        '''
+
+
+def handle_lists() -> dict:
+    """Reminder list names with open-item counts. Distinguishes an empty list
+    from a missing one, which `list` (\"No reminders found.\") can't."""
+    script = f'''
+        tell application "Reminders"
+            set fSep to {_FIELD_SEP}
+            set rSep to {_REC_SEP}
+            set output to ""
+            repeat with lst in lists
+                set openCount to count of (reminders of lst whose completed is false)
+                set output to output & (name of lst) & fSep & openCount & rSep
+            end repeat
+            return output
+        end tell
+        '''
+    result = run_osascript(script, timeout=60)
+    lists = []
+    for record in result.split(chr(30)):
+        if record:
+            name, _, count = record.partition(chr(31))
+            lists.append({"name": name, "open": int(count) if count.isdigit() else 0})
+    return {"lists": lists}
 
 
 def handle_list(list: str = None, include_completed: bool = False) -> dict | str:
@@ -120,7 +167,7 @@ def handle_list(list: str = None, include_completed: bool = False) -> dict | str
             "priority": int(parts[6]) if parts[6].isdigit() else 0,
         })
     entries.sort(key=lambda e: e["completed"])
-    return entries if entries else "No reminders found."
+    return {"reminders": entries} if entries else "No reminders found."
 
 
 def handle_create(title: str, list: str = None, due_date: str = None, notes: str = None, recurrence: str = None) -> str:
@@ -133,25 +180,7 @@ def handle_create(title: str, list: str = None, due_date: str = None, notes: str
     if notes:
         props.append(f'body:"{_escape(notes)}"')
 
-    due_set = ""
-    if due_date:
-        # Build the date via AppleScript's `current date` + explicit component
-        # assignment rather than parsing an ISO string literal (locale-fragile).
-        try:
-            from datetime import datetime
-            dt = datetime.fromisoformat(due_date.replace("Z", "+00:00"))
-        except ValueError:
-            raise ValueError("Invalid due_date format. Use ISO-8601, e.g. 2026-04-11T09:00:00")
-        due_set = f'''
-            set dueD to current date
-            set year of dueD to {dt.year}
-            set month of dueD to {dt.month}
-            set day of dueD to {dt.day}
-            set hours of dueD to {dt.hour}
-            set minutes of dueD to {dt.minute}
-            set seconds of dueD to 0
-            set due date of newReminder to dueD
-        '''
+    due_set = _due_date_script(due_date, "newReminder") if due_date else ""
 
     script = f'''
         tell application "Reminders"
@@ -189,6 +218,28 @@ def _act_on_reminder_script(reminder_id: str, action: str) -> str:
             error "Reminder not found: {escaped}"
         end tell
         '''
+
+
+def handle_update(id: str, title: str = None, due_date: str = None, notes: str = None) -> str:
+    """Edit a reminder in place by its identifier: any of title, due_date
+    (ISO-8601), notes. Fields not passed are left unchanged. A due date can
+    be moved but not removed -- Reminders' AppleScript rejects both
+    `set due date to missing value` and `delete due date`."""
+    if not id:
+        raise ValueError("Missing required argument: id")
+    actions = []
+    if title:
+        actions.append(f'set name of r to "{_escape(title)}"')
+    if notes is not None:
+        actions.append(f'set body of r to "{_escape(notes)}"')
+    if due_date:
+        actions.append(_due_date_script(due_date, "r"))
+    if not actions:
+        raise ValueError("Nothing to update: pass title, due_date or notes")
+    old = run_osascript(_act_on_reminder_script(id, "\n".join(actions)))
+    changed = [k for k, v in (("title", title), ("due_date", due_date),
+                              ("notes", notes is not None)) if v]
+    return f"Updated '{old}': {', '.join(changed)}"
 
 
 def handle_complete(id: str) -> str:
