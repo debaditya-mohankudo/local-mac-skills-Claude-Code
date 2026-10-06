@@ -1,5 +1,6 @@
 """Notes tools — AppleScript bridge for Apple Notes."""
 import html
+import re
 import subprocess
 
 
@@ -13,6 +14,53 @@ def _run_applescript(script: str) -> str:
         err = result.stderr.decode(errors="replace").strip()
         raise RuntimeError(err)
     return result.stdout.decode(errors="replace").strip()
+
+
+_TAG_RE = re.compile(r"[\w-]+")
+
+
+def _parse_tags(tags: str) -> list[str]:
+    """Split a comma/space separated tag string into bare tag names ('#' optional)."""
+    out: list[str] = []
+    for raw in re.split(r"[,\s]+", tags or ""):
+        name = raw.lstrip("#")
+        if name and _TAG_RE.fullmatch(name) and name not in out:
+            out.append(name)
+    return out
+
+
+def _apply_tags(note_id: str, tags: list[str]) -> None:
+    """Turn each tag into a real Notes hashtag by typing it into the note.
+
+    A tag is an inline attachment that AppleScript's note body cannot express
+    ("#x" written through `body` stays plain text and never matches a tag
+    smart folder). Typing "#x" then a space in the app is what converts it, so
+    this drives Notes through System Events -- the terminal needs Accessibility
+    permission. Keystrokes go to whatever is frontmost, so it bails out unless
+    Notes really is.
+    """
+    escaped_id = note_id.replace("\\", "\\\\").replace('"', '\\"')
+    typed = "\n".join(
+        f'    keystroke "#{t}"\n    delay 0.4\n    keystroke " "\n    delay 0.3'
+        for t in tags
+    )
+    script = f"""
+tell application "Notes"
+    activate
+    show note id "{escaped_id}"
+end tell
+delay 1
+tell application "System Events"
+    set frontmost of process "Notes" to true
+    delay 0.5
+    set frontName to name of first application process whose frontmost is true
+    if frontName is not "Notes" then error "Notes is not frontmost; refusing to type"
+    key code 125 using {{command down}}
+{typed}
+end tell
+delay 0.5
+"""
+    _run_applescript(script)
 
 
 def handle_list(folder: str = "", limit: int = 20) -> list:
@@ -127,8 +175,15 @@ end tell
     return results or "No folders found."
 
 
-def handle_add(title: str, body: str = "", folder: str = "Notes") -> dict:
-    """Create a new Apple Note. folder: target folder name (default: Notes)."""
+def handle_add(title: str, body: str = "", folder: str = "Notes", tags: str = "") -> dict:
+    """Create a new Apple Note. folder: target folder name (default: Notes).
+
+    tags: comma/space separated names ("market-watch, gold"; '#' optional) added
+    as real Notes tags, so tag-based smart folders pick the note up. Needs
+    Accessibility permission; if tagging fails the note is still created and
+    the result carries `tags_error`. Smart folders cannot be a target `folder`
+    (Notes rejects it) -- create in a normal folder and tag instead.
+    """
     escaped_title = title.replace('"', '\\"').replace("\\n", "\n")
     escaped_body = body.replace("\\", "\\\\").replace('"', '\\"')
     escaped_folder = folder.replace('"', '\\"')
@@ -150,12 +205,20 @@ end tell
 """
     raw = _run_applescript(script)
     cols = raw.split("|||", 1)
-    return {
+    result = {
         "status": "created",
         "id": cols[0] if cols else "",
         "title": cols[1] if len(cols) > 1 else title,
         "folder": folder,
     }
+    names = _parse_tags(tags)
+    if names and result["id"]:
+        try:
+            _apply_tags(result["id"], names)
+            result["tags"] = names
+        except RuntimeError as e:
+            result["tags_error"] = str(e)
+    return result
 
 
 def handle_update(id: str, body: str, mode: str = "replace", title: str = "") -> dict:
