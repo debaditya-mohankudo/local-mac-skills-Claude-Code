@@ -56,11 +56,31 @@ def _escape_js(js: str) -> str:
     )
 
 
-def handle_open(url: str) -> str:
-    """Open a URL in Safari (allowlist enforced)."""
+def _escape_applescript(text: str) -> str:
+    return text.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def handle_open(url: str, new_window: bool = False) -> str:
+    """Open a URL in Safari (allowlist enforced).
+
+    new_window=True opens it in a new window and brings that window to the
+    front. js/read/current_url/close_tab all act on the front window's current
+    tab, so a new window is the one way to aim them at the page just opened
+    without touching the tabs already open. The default opens in the existing
+    front window and does not select the new tab.
+    """
     if not _check_allowed(url):
         raise LocalProcessError(f"BLOCKED: '{url}' is not in the Safari allowlist.")
-    out = run_osascript(f'tell application "Safari" to open location "{url}"')
+    quoted = _escape_applescript(url)
+    if new_window:
+        run_osascript(
+            'tell application "Safari"\n'
+            f'    make new document with properties {{URL:"{quoted}"}}\n'
+            "    activate\n"
+            "end tell"
+        )
+        return f"Opened in new window: {url}"
+    out = run_osascript(f'tell application "Safari" to open location "{quoted}"')
     return out if out else f"Opened: {url}"
 
 
