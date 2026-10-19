@@ -13,9 +13,23 @@ VAULT_INDEX_DB      = cfg.vault_index_db
 TABLE_KEYWORD_HINTS = cfg.table_keyword_hints
 
 
+def _inside_vault(fp: Path, arg: str) -> Path:
+    # pathlib drops VAULT_PATH when the argument is absolute, and `..` or a
+    # symlinked folder can walk out of it, so the check is on the resolved path.
+    root = VAULT_PATH.resolve()
+    resolved = fp.resolve()
+    if resolved != root and root not in resolved.parents:
+        raise PermissionError(f"Refused: {arg!r} resolves outside the vault")
+    return fp
+
+
 def _vault_path(path: str) -> Path:
     p = path if path.endswith(".md") else path + ".md"
-    return VAULT_PATH / p
+    return _inside_vault(VAULT_PATH / p, path)
+
+
+def _vault_dir(folder: str) -> Path:
+    return _inside_vault(VAULT_PATH / folder, folder) if folder else VAULT_PATH
 
 
 def _strip_code_blocks(text: str) -> str:
@@ -358,7 +372,7 @@ def handle_filename_search(query: str, folder: str = "") -> str:
         folder: Optional subfolder to restrict search (e.g. "Astrology").
     """
     query_lower = query.lower()
-    search_root = VAULT_PATH / folder if folder else VAULT_PATH
+    search_root = _vault_dir(folder)
     matches = [
         str(fp.relative_to(VAULT_PATH))
         for fp in sorted(search_root.rglob("*.md"))

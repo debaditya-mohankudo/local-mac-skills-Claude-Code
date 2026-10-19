@@ -16,6 +16,7 @@ from llama_index.embeddings.ollama import OllamaEmbedding
 
 from config import config as cfg
 from tools.rag_core import load_index as _rag_load, save_index as _rag_save, query_index as _rag_query
+from tools.vault import _vault_dir, _vault_path
 
 # Mirrors the indexer's skip sets — keep in sync with tools/index_vault_sections.py
 _SKIP_HEADINGS = {
@@ -428,7 +429,7 @@ def handle_index_file(path: str) -> str:
         path: vault-relative path, e.g. "Projects/My_Note.md"
     """
     norm = path if path.endswith(".md") else path + ".md"
-    fp = cfg.vault_path / norm
+    fp = _vault_path(path)
     if not fp.exists():
         return f"File not found: {norm}"
 
@@ -510,7 +511,7 @@ def handle_unindexed_files(folder: str = "") -> dict:
     Returns:
         {"unindexed": [...], "total_on_disk": N, "total_indexed_files": M}
     """
-    scan_root = cfg.vault_path / folder if folder else cfg.vault_path
+    scan_root = _vault_dir(folder)
 
     # All .md files on disk (vault-relative paths, skip hidden/Obsidian dirs)
     on_disk: set[str] = set()

@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import tools.vault as vault
+import tools.vault_rag as vault_rag
 
 
 class TestVaultPath:
@@ -15,6 +16,75 @@ class TestVaultPath:
         result = vault._vault_path("Notes/MyNote.md")
         assert str(result).endswith("MyNote.md")
         assert not str(result).endswith("MyNote.md.md")
+
+
+class TestVaultContainment:
+    @pytest.fixture
+    def vault_root(self, tmp_path):
+        root = tmp_path / "vault"
+        root.mkdir()
+        (tmp_path / "secret.md").write_text("outside")
+        (root / "Note.md").write_text("inside")
+        (root / "link").symlink_to(tmp_path)
+        with patch.object(vault, "VAULT_PATH", root):
+            yield root
+
+    # Each escape is built from the vault root, so the absolute case needs no placeholder.
+    ESCAPES = [
+        lambda root: str(root.parent / "secret.md"),  # absolute path outside the vault
+        lambda root: "../secret",                     # walks out with ..
+        lambda root: "Sub/../../secret",              # walks out from inside a subfolder
+        lambda root: "link/secret",                   # walks out through a symlinked folder
+    ]
+    FOLDER_ESCAPES = [
+        lambda root: str(root.parent),
+        lambda root: "..",
+        lambda root: "../vault/..",
+    ]
+
+    @pytest.mark.parametrize("escape", ESCAPES)
+    @pytest.mark.parametrize("call", [
+        vault.handle_read,
+        lambda a: vault.handle_write(a, "x"),
+        lambda a: vault.handle_append(a, "x"),
+        vault.handle_delete,
+        lambda a: vault.handle_move("Note", a),
+        vault.handle_links,
+        vault.handle_outline,
+        vault.handle_tags,
+        vault.handle_tasks,
+        lambda a: vault_rag.handle_index_file(a),
+    ])
+    def test_escape_refused_and_outside_untouched(self, vault_root, escape, call):
+        with pytest.raises(PermissionError):
+            call(escape(vault_root))
+        assert (vault_root.parent / "secret.md").read_text() == "outside"
+        assert (vault_root / "Note.md").read_text() == "inside"
+
+    @pytest.mark.parametrize("escape", FOLDER_ESCAPES)
+    @pytest.mark.parametrize("call", [
+        lambda f: vault.handle_filename_search("secret", f),
+        lambda f: vault_rag.handle_unindexed_files(f),
+    ])
+    def test_folder_escape_refused(self, vault_root, escape, call):
+        with pytest.raises(PermissionError):
+            call(escape(vault_root))
+
+    def test_in_vault_paths_unchanged(self, vault_root):
+        vault.handle_write("Sub/Note", "body")
+        assert (vault_root / "Sub" / "Note.md").read_text() == "body"
+        assert vault.handle_read("Sub/../Sub/Note.md") == "body"
+        vault.handle_move("Sub/Note", "Other/Note")
+        assert (vault_root / "Other" / "Note.md").exists()
+        assert "Other/Note.md" in vault.handle_filename_search("note", "Other")
+
+    def test_refusal_logged_as_blocked(self, vault_root):
+        import tool_hooks
+        with patch.object(tool_hooks, "_log_call") as log:
+            with pytest.raises(PermissionError):
+                with tool_hooks.tool_called("vault", "read", {"path": "../secret"}):
+                    vault.handle_read("../secret")
+        assert log.call_args.kwargs["blocked"] is True
 
 
 class TestStripCodeBlocks:

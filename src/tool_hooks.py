@@ -141,22 +141,6 @@ def _last_found(call_name: str, window_s: float = _GATE_WINDOW_S) -> bool | None
     return result
 
 
-def _vault_guard(domain: str, action: str, kwargs: dict) -> None:
-    if domain != "vault" or action not in ("write", "append", "delete", "move"):
-        return
-    from tools.vault import _vault_path, VAULT_PATH
-
-    vault_root = VAULT_PATH.resolve()
-    for key in ("path", "to"):
-        if key not in kwargs:
-            continue
-        resolved = _vault_path(kwargs[key]).resolve()
-        if resolved != vault_root and vault_root not in resolved.parents:
-            raise PermissionError(
-                f"Refused: vault__{action} {key}={kwargs[key]!r} resolves outside the vault"
-            )
-
-
 def _imessage_guard(domain: str, action: str, kwargs: dict) -> None:
     if domain != "imessage" or action != "send":
         return
@@ -182,7 +166,7 @@ def _mail_guard(domain: str, action: str, kwargs: dict) -> None:
         )
 
 
-_PRECHECKS = (_vault_guard, _imessage_guard, _mail_guard)
+_PRECHECKS = (_imessage_guard, _mail_guard)
 
 
 @contextlib.contextmanager
@@ -209,15 +193,20 @@ def tool_called(domain: str, action: str, kwargs: dict):
 
     start = time.monotonic()
     error: str | None = None
+    # A handler refusing its own arguments (e.g. a vault path that resolves
+    # outside the vault, checked in tools.vault._vault_path) is a block too.
+    blocked = False
     holder: dict = {}
     try:
         yield holder
     except Exception as exc:
         error = str(exc)
+        blocked = isinstance(exc, PermissionError)
         raise
     finally:
         duration_ms = int((time.monotonic() - start) * 1000)
-        _log_call(domain, action, kwargs, ok=error is None, error=error, duration_ms=duration_ms)
+        _log_call(domain, action, kwargs, ok=error is None, error=error, duration_ms=duration_ms,
+                  blocked=blocked, reason=error if blocked else None)
         if error is None:
             found = _found(domain, action, kwargs, holder.get("result"))
             _SESSION_CALLS.append((call_name, time.monotonic(), found))
