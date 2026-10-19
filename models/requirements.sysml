@@ -52,8 +52,8 @@ package LocalMacRequirements {
     satisfy requirement NoDomainLogicOutsideToolsPackage by Dispatcher;
 
     @ModelProvenance {
-        derivedFromCommit = "a926de74408ce95dbe963cfdc13abd479bbf7c25";
-        derivedAt = "2026-08-07";
+        derivedFromCommit = "080409c1511708d98cabc569a64303356be84fe6";
+        derivedAt = "2026-10-19";
         modelledPaths = (
             "src/dispatcher.py",
             "src/tool_hooks.py"

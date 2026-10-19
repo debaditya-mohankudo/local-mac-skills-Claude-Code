@@ -21,20 +21,24 @@ package ToolCallGatesPackage {
          */
         attribute gateWindowSeconds : Integer = 120;
 
-        part vaultGuard : VaultPathGuard;
         part imessageGuard : IMessageRecipientGuard;
         part mailGuard : MailDeleteGuard;
         part sessionLog : SessionCallLog;
     }
 
-    part def VaultPathGuard {
+    part def VaultPathContainment {
         doc
         /*
-         * Blocks vault__write, vault__append, vault__delete, vault__move
-         * unless the resolved target path (kwargs "path" or "to") stays
-         * inside VAULT_PATH. No time window involved — this is a pure
-         * path-containment check, not a recency check.
-         * Source: src/tool_hooks.py:_vault_guard.
+         * Not a precheck: containment lives where vault paths are built, so
+         * no vault or vault_rag handler can build one without it. Every
+         * caller argument naming a note or folder goes through _vault_path
+         * or _vault_dir, which raise PermissionError unless the resolved
+         * path (absolute, `..` and symlinked folders included) stays under
+         * the resolved VAULT_PATH. tool_called logs that refusal as
+         * blocked=1 like a precheck refusal. Nothing enforces that a new
+         * handler uses the helpers instead of joining onto VAULT_PATH itself.
+         * Source: src/tools/vault.py:_inside_vault, _vault_path, _vault_dir;
+         * src/tool_hooks.py:tool_called.
          */
     }
 
@@ -77,7 +81,9 @@ package ToolCallGatesPackage {
         /*
          * A precheck failure must raise PermissionError before the
          * wrapped handler executes, and must be logged with blocked=1 —
-         * the handler must never run on a blocked call.
+         * the handler must never run on a blocked call. A PermissionError
+         * the handler raises itself (VaultPathContainment) is also logged
+         * with blocked=1.
          * Source: src/tool_hooks.py:tool_called (for check in _PRECHECKS
          * loop, raised before `yield holder`).
          */
@@ -108,10 +114,11 @@ package ToolCallGatesPackage {
     satisfy requirement EveryCallIsLogged by ToolCallGates;
 
     @ModelProvenance {
-        derivedFromCommit = "a926de74408ce95dbe963cfdc13abd479bbf7c25";
-        derivedAt = "2026-08-07";
+        derivedFromCommit = "080409c1511708d98cabc569a64303356be84fe6";
+        derivedAt = "2026-10-19";
         modelledPaths = (
-            "src/tool_hooks.py"
+            "src/tool_hooks.py",
+            "src/tools/vault.py"
         );
     }
 }
