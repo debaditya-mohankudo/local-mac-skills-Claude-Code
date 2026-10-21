@@ -20,7 +20,7 @@ fi
 
 # Find the task with [ ] and replace with [x]
 if grep -q "\[ \] $TASK" "$FILE_PATH"; then
-    sed -i '' "s/\[ \] $TASK/\[x\] $TASK/" "$FILE_PATH"
+    sed -i.bak "s/\[ \] $TASK/\[x\] $TASK/" "$FILE_PATH" && rm -f "$FILE_PATH.bak"
     echo "✅ Task marked as complete: $TASK"
     echo ""
     grep "\[x\] $TASK" "$FILE_PATH"

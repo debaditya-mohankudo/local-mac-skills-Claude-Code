@@ -40,9 +40,9 @@ if [[ -z "$NEXT_SECTION_LINE" ]]; then
 else
     # Insert before next section
     INSERT_LINE=$((SECTION_LINE + NEXT_SECTION_LINE - 1))
-    sed -i '' "${INSERT_LINE}i\\
+    sed -i.bak "${INSERT_LINE}i\\
 $TASK
-" "$PERSONAL_TASKS"
+" "$PERSONAL_TASKS" && rm -f "$PERSONAL_TASKS.bak"
     echo "✅ Task added to \"$SECTION\""
 fi
 
