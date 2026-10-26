@@ -105,7 +105,7 @@ end tell
                 "created": cols[3],
                 "snippet": cols[4] if len(cols) > 4 else "",
             })
-    return results or "No notes found."
+    return results
 
 
 def handle_read(id: str) -> dict:
@@ -172,7 +172,7 @@ end tell
                 "name": cols[0],
                 "noteCount": cols[1] if len(cols) > 1 else "0",
             })
-    return results or "No folders found."
+    return results
 
 
 def handle_add(title: str, body: str = "", folder: str = "Notes", tags: str = "") -> dict:

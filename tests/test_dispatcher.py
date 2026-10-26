@@ -2,7 +2,12 @@
 import importlib
 
 import pytest
-from dispatcher import _wrap, DOMAIN_MAP
+
+from dispatcher import _wrap, DOMAIN_MAP, EMPTY_TEXT
+
+
+# _wrap logs every call; keep that out of the real tool_hints.sqlite.
+pytestmark = pytest.mark.usefixtures("tool_hints_db")
 
 
 class TestWrap:
@@ -13,7 +18,7 @@ class TestWrap:
             calls.append((x, y))
             return "ok"
 
-        wrapped = _wrap("test", handler)
+        wrapped = _wrap("test", "act", handler)
         result = wrapped(x=1, y=2)
         assert result == "ok"
         assert calls == [(1, 2)]
@@ -22,7 +27,7 @@ class TestWrap:
         def my_handler():
             pass
 
-        wrapped = _wrap("d", my_handler)
+        wrapped = _wrap("d", "act", my_handler)
         assert wrapped.__name__ == "my_handler"
 
     @pytest.mark.asyncio
@@ -30,9 +35,14 @@ class TestWrap:
         async def async_handler(x):
             return x * 2
 
-        wrapped = _wrap("d", async_handler)
+        wrapped = _wrap("d", "act", async_handler)
         result = await wrapped(x=5)
         assert result == 10
+
+    def test_empty_list_becomes_text_for_mcp(self):
+        # FastMCP turns [] into a result with no content; the MCP path says it in words.
+        assert _wrap("d", "act", lambda: [])() == EMPTY_TEXT
+        assert _wrap("d", "act", lambda: {"reminders": []})() == {"reminders": []}
 
 
 class TestDomainMap:

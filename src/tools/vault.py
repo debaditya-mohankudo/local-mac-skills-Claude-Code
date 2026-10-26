@@ -6,6 +6,7 @@ from datetime import date
 from pathlib import Path
 
 from config import config as cfg
+from tool_hooks import Refused
 
 VAULT_NAME          = cfg.vault_name
 VAULT_PATH          = cfg.vault_path
@@ -19,7 +20,7 @@ def _inside_vault(fp: Path, arg: str) -> Path:
     root = VAULT_PATH.resolve()
     resolved = fp.resolve()
     if resolved != root and root not in resolved.parents:
-        raise PermissionError(f"Refused: {arg!r} resolves outside the vault")
+        raise Refused(f"Refused: {arg!r} resolves outside the vault")
     return fp
 
 
@@ -131,7 +132,7 @@ def handle_vault_keyword_hints(limit: int = 20) -> str:
         return f"{TABLE_KEYWORD_HINTS} table not found. Run: uv run python tools/index_vault_sections.py"
 
     if not rows:
-        return "No searches logged yet."
+        return []
 
     lines = [f"Top {len(rows)} searched keywords:\n"]
     for keyword, count, last, top_file, domain in rows:
@@ -146,7 +147,7 @@ def handle_links(path: str) -> str:
     fp = _vault_path(path)
     text = _strip_code_blocks(fp.read_text(errors="ignore"))
     links = re.findall(r"\[\[([^\]|#]+)", text)
-    return "\n".join(sorted(set(links))) if links else "No outgoing links."
+    return "\n".join(sorted(set(links))) if links else []
 
 
 def handle_backlinks(path: str) -> str:
@@ -160,7 +161,7 @@ def handle_backlinks(path: str) -> str:
         text = _strip_code_blocks(fp.read_text(errors="ignore"))
         if pattern.search(text):
             matches.append(str(fp.relative_to(VAULT_PATH)))
-    return "\n".join(sorted(matches)) if matches else "No backlinks found."
+    return "\n".join(sorted(matches)) if matches else []
 
 
 def handle_daily_read() -> str:
@@ -175,7 +176,7 @@ def handle_outline(path: str) -> str:
     fp = _vault_path(path)
     text = _strip_code_blocks(fp.read_text(errors="ignore"))
     headings = [l.rstrip() for l in text.splitlines() if l.startswith("#")]
-    return "\n".join(headings) if headings else "No headings found."
+    return "\n".join(headings) if headings else []
 
 
 def handle_tags(path: str = "") -> str:
@@ -221,7 +222,7 @@ def handle_tasks(scope: str = "all") -> str:
             continue
         for m in task_re.finditer(fp.read_text(errors="ignore")):
             results.append(f"[{fp.relative_to(VAULT_PATH)}] {m.group(1)}")
-    return "\n".join(results) if results else "No incomplete tasks found."
+    return "\n".join(results) if results else []
 
 
 def handle_stats() -> str:
@@ -309,7 +310,7 @@ def handle_section_search(query: str, tag: str = "", folder: str = "", limit: in
     conn.close()
 
     if not rows:
-        return "No matching sections found."
+        return []
 
     lines = []
     current_file = None
@@ -355,7 +356,7 @@ def handle_tags_search(query: str = "", limit: int = 30) -> str:
 
     if not rows:
         suffix = f' matching "{query}"' if query else ""
-        return f"No tags found{suffix}."
+        return []
 
     query_suffix = f' matching "{query}"' if query else ""
     lines = [f"Tags{query_suffix} ({len(rows)} shown):\n"]
@@ -380,7 +381,7 @@ def handle_filename_search(query: str, folder: str = "") -> str:
         and query_lower in fp.stem.lower()
     ]
     if not matches:
-        return f"No files found with '{query}' in name."
+        return []
     return "\n".join(matches) + f"\n\n({len(matches)} file{'s' if len(matches) != 1 else ''} found)"
 
 
@@ -415,7 +416,7 @@ def handle_folder_search(tag: str, limit: int = 20) -> str:
     conn.close()
 
     if not rows:
-        return f"No folders found matching tag '{tag}'."
+        return []
 
     lines = [f"Folders matching '{tag}':\n"]
     for folder, folder_tags in rows:

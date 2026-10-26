@@ -120,7 +120,7 @@ def handle_list_tabs() -> str:
         end tell
         '''
     out = run_osascript(script)
-    return out if out else "No tabs open."
+    return out if out else []
 
 
 def handle_close_tab() -> str:

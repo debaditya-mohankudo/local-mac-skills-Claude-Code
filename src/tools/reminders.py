@@ -66,7 +66,7 @@ def _due_date_script(due_date: str, var: str) -> str:
 
 def handle_lists() -> dict:
     """Reminder list names with open-item counts. Distinguishes an empty list
-    from a missing one, which `list` (\"No reminders found.\") can't."""
+    from a missing one, which `list` (an empty list) can't."""
     script = f'''
         tell application "Reminders"
             set fSep to {_FIELD_SEP}
@@ -147,9 +147,6 @@ def handle_list(list: str = None, include_completed: bool = False) -> dict | str
         end tell
         '''
     result = run_osascript(script, timeout=60)
-    if not result:
-        return "No reminders found."
-
     entries = []
     for record in result.split(chr(30)):
         if not record:
@@ -167,7 +164,7 @@ def handle_list(list: str = None, include_completed: bool = False) -> dict | str
             "priority": int(parts[6]) if parts[6].isdigit() else 0,
         })
     entries.sort(key=lambda e: e["completed"])
-    return {"reminders": entries} if entries else "No reminders found."
+    return {"reminders": entries}
 
 
 def handle_create(title: str, list: str = None, due_date: str = None, notes: str = None, recurrence: str = None) -> str:

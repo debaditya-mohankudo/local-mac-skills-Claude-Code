@@ -78,7 +78,7 @@ def handle_query(query: str, repo: str = "", k: int = 5) -> str:
     hits  = query_index(index, meta, q_vec, k=k)
 
     if not hits:
-        return "No relevant chunks found."
+        return []
 
     parts = [f"Code RAG — {chunk_count} chunks, commit {commit[:12]}\n"]
     for i, h in enumerate(hits, 1):
@@ -205,7 +205,7 @@ def handle_smart_search(query: str, repo: str = "", k: int = 5) -> str:
         hits.append({"id": int(doc_id), "score": float(score), **info})
 
     if not hits:
-        return "No relevant chunks found."
+        return []
 
     parts = [f"Code smart search ({mode}) — {chunk_count} chunks, commit {commit[:12]}\n"]
     for i, h in enumerate(hits, 1):

@@ -114,7 +114,7 @@ def handle_read(limit: int = 10, direction: str = "received") -> dict | str:
         con.close()
 
     if not rows:
-        return "No messages found."
+        return []
 
     messages = []
     for date, sender, is_from_me, text, attributed_body in rows:

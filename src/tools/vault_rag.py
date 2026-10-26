@@ -242,7 +242,7 @@ def handle_query_vault(query: str, top_k: int = 8) -> str:
         f"### {h.get('file', 'unknown')} — {h.get('section', '')} (score: {h['score']:.3f})\n\n{h.get('file', '')}/{h.get('section', '')}"
         for h in hits
     ]
-    return "\n\n---\n\n".join(results) if results else "No relevant chunks found."
+    return "\n\n---\n\n".join(results) if results else []
 
 
 def handle_fts_vault(query: str, limit: int = 10, folder: str = "") -> str:
@@ -282,7 +282,7 @@ def handle_fts_vault(query: str, limit: int = 10, folder: str = "") -> str:
     con.close()
 
     if not rows:
-        return f"No results for: {query}"
+        return []
 
     return "\n\n".join(f"**{file}** — {section}\n{snip}" for file, section, snip in rows)
 
@@ -338,7 +338,7 @@ def handle_smart_search(query: str, fts_candidate_limit: int = 50, top_k: int = 
     # --- Fallback: no semantic index ---
     if index is None:
         lines = [f"**{file}** — {section}\n{snip}" for _, file, section, snip in fts_rows[:top_k]]
-        return "\n\n".join(lines) if lines else f"No results found for: {query}"
+        return "\n\n".join(lines) if lines else []
 
     embed_model = _get_embed_model()
     q_vec = np.array([embed_model.get_text_embedding(query)], dtype=np.float32)
@@ -362,7 +362,7 @@ def handle_smart_search(query: str, fts_candidate_limit: int = 50, top_k: int = 
             entry += f"\n{snip}"
         results.append(entry)
 
-    return "\n\n".join(results) if results else f"No results found for: {query}"
+    return "\n\n".join(results) if results else []
 
 
 def handle_index_status() -> str:

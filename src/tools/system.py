@@ -151,7 +151,7 @@ def handle_process_list(name: str = "") -> str:
         ["/bin/sh", "-c", f"ps aux | head -1; ps aux | grep -i '{name}' | grep -v grep | head -30"],
         capture_output=True, text=True, timeout=15,
     )
-    return result.stdout or "No processes found."
+    return result.stdout or []
 
 
 _BLOCKED_PROCESSES = {"launchd", "kernel_task", "WindowServer", "loginwindow"}
@@ -203,7 +203,7 @@ def handle_spotlight_search(query: str, path: str = "") -> list | str:
     result = subprocess.run(["/usr/bin/mdfind"] + args, capture_output=True, text=True, timeout=30)
     output = result.stdout.strip()
     if not output:
-        return "No files found."
+        return []
     return [line for line in output.split("\n") if line]
 
 

@@ -16,28 +16,26 @@ import contextlib
 import json
 import sqlite3
 import time
-from collections import deque
 from typing import Callable
 
 from config import config as cfg
 
 _DB_PATH = cfg.tool_hints_db
 
-# In-memory, per-server-process record of the most recent tool calls this
-# session has made: [(call_name, monotonic_ts, found), ...], oldest first.
-# Bounded FIFO rather than an unbounded list — full history is already
-# persisted to mcp_tool_calls, so this only needs to cover the gate lookback
-# window, not the whole process lifetime.
-# `found` is None for calls with no result-quality check (see _FOUND_CHECKS);
-# True/False for calls that do, e.g. contacts__search actually finding someone.
-_SESSION_CALLS_MAXLEN = 100
-_SESSION_CALLS: deque[tuple[str, float, bool | None]] = deque(maxlen=_SESSION_CALLS_MAXLEN)
-
-# Gate prereqs stay valid for this many seconds. Kept even though calls are
-# now persisted and technically queryable indefinitely, so "recently looked
-# up" still means recently, not "at any point since the process started"
-# (user confirmed).
+# Gate prereqs stay valid for this many seconds. Calls are persisted to
+# mcp_tool_calls and queryable indefinitely, but "recently looked up" still
+# means recently, not "at any point in the log" (user confirmed).
+#
+# Gates read the persisted table rather than process memory, so a prerequisite
+# satisfied by one process (the MCP server, or one `mac` CLI invocation)
+# counts for a gated call made by another — each `mac` call is its own process.
 _GATE_WINDOW_S = 120.0
+
+
+class Refused(PermissionError):
+    """A policy refusal: a gate, or a handler refusing its own arguments (a
+    vault path outside the vault). Logged as blocked. A plain PermissionError
+    from the OS (e.g. a macOS privacy denial) is an ordinary error, not this."""
 
 # Args that may carry personal data — logged as a prefix + length, never
 # verbatim, per this repo's privacy rules.
@@ -62,9 +60,21 @@ def _redact(domain: str, action: str, kwargs: dict) -> dict:
     return redacted
 
 
+# DB paths whose mcp_tool_calls schema this process has already ensured. Keyed
+# by path (not a flag) because tests point _DB_PATH at a scratch file.
+_SCHEMA_READY: set[str] = set()
+
+
 def _connect() -> sqlite3.Connection:
     conn = sqlite3.connect(_DB_PATH, timeout=10)
     conn.execute("PRAGMA busy_timeout = 10000")
+    if str(_DB_PATH) not in _SCHEMA_READY:
+        _ensure_schema(conn)
+        _SCHEMA_READY.add(str(_DB_PATH))
+    return conn
+
+
+def _ensure_schema(conn: sqlite3.Connection) -> None:
     conn.execute("""
         CREATE TABLE IF NOT EXISTS mcp_tool_calls (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -76,35 +86,39 @@ def _connect() -> sqlite3.Connection:
             blocked     INTEGER DEFAULT 0,
             reason      TEXT,
             duration_ms INTEGER,
-            ts          TIMESTAMP DEFAULT (datetime('now'))
+            ts          TIMESTAMP DEFAULT (datetime('now')),
+            found       INTEGER
         )
     """)
-    return conn
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(mcp_tool_calls)")}
+    if "found" not in columns:
+        conn.execute("ALTER TABLE mcp_tool_calls ADD COLUMN found INTEGER")
 
 
 def _log_call(domain: str, action: str, kwargs: dict, *, ok: bool, error: str | None,
-              duration_ms: int, blocked: bool = False, reason: str | None = None) -> None:
+              duration_ms: int, blocked: bool = False, reason: str | None = None,
+              found: bool | None = None) -> None:
     try:
         conn = _connect()
         conn.execute(
             "INSERT INTO mcp_tool_calls "
-            "(domain, action, args_json, ok, error, blocked, reason, duration_ms) "
-            "VALUES (?,?,?,?,?,?,?,?)",
+            "(domain, action, args_json, ok, error, blocked, reason, duration_ms, found) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
             (domain, action, json.dumps(_redact(domain, action, kwargs)),
-             int(ok), error, int(blocked), reason, duration_ms),
+             int(ok), error, int(blocked), reason, duration_ms,
+             None if found is None else int(found)),
         )
         conn.commit()
         conn.close()
     except Exception:
-        # Logging must never break a tool call.
+        # Logging must never break a tool call. A lost row only means a later
+        # gate sees no prerequisite and refuses — the safe direction.
         pass
 
 
 def _contacts_search_found(kwargs: dict, result: object) -> bool:
-    """False when contacts__search's own result string says it found nobody."""
-    if not isinstance(result, str):
-        return bool(result)
-    return "no contacts found" not in result.lower()
+    """False when contacts__search found nobody (handle_search returns [])."""
+    return bool(result)
 
 
 # Per-(domain, action) result-quality checks. A call with no entry here has no
@@ -125,20 +139,35 @@ def _found(domain: str, action: str, kwargs: dict, result: object) -> bool | Non
         return None
 
 
+def _recent_call(call_name: str, window_s: float = _GATE_WINDOW_S) -> tuple[bool, bool | None]:
+    """(happened, found) for the most recent successful `call_name` within the
+    window, read from mcp_tool_calls. A read failure counts as "not happened",
+    so a gate fails closed."""
+    domain, _, action = call_name.partition("__")
+    try:
+        with contextlib.closing(_connect()) as conn:
+            row = conn.execute(
+                "SELECT found FROM mcp_tool_calls "
+                "WHERE domain = ? AND action = ? AND ok = 1 AND blocked = 0 "
+                "AND ts >= datetime('now', ?) ORDER BY id DESC LIMIT 1",
+                (domain, action, f"-{int(window_s)} seconds"),
+            ).fetchone()
+    except Exception:
+        return False, None
+    if row is None:
+        return False, None
+    return True, None if row[0] is None else bool(row[0])
+
+
 def _called_recently(call_name: str, window_s: float = _GATE_WINDOW_S) -> bool:
-    cutoff = time.monotonic() - window_s
-    return any(name == call_name and ts >= cutoff for name, ts, _found in _SESSION_CALLS)
+    return _recent_call(call_name, window_s)[0]
 
 
 def _last_found(call_name: str, window_s: float = _GATE_WINDOW_S) -> bool | None:
     """`found` of the most recent matching call within the window, or None if
     no such call happened (caller should treat that as "not satisfied")."""
-    cutoff = time.monotonic() - window_s
-    result: bool | None = None
-    for name, ts, found in _SESSION_CALLS:
-        if name == call_name and ts >= cutoff:
-            result = found
-    return result
+    happened, found = _recent_call(call_name, window_s)
+    return found if happened else None
 
 
 def _imessage_guard(domain: str, action: str, kwargs: dict) -> None:
@@ -146,12 +175,12 @@ def _imessage_guard(domain: str, action: str, kwargs: dict) -> None:
         return
     found = _last_found("contacts__search")
     if found is None:
-        raise PermissionError(
+        raise Refused(
             f"Refused: imessage__send requires contacts__search within the last "
             f"{int(_GATE_WINDOW_S)}s. Call contacts__search first, then retry."
         )
     if found is False:
-        raise PermissionError(
+        raise Refused(
             "Refused: imessage__send — the most recent contacts__search within "
             f"the last {int(_GATE_WINDOW_S)}s found no matching contact. "
             "Confirm the recipient before sending, or search again with the right name."
@@ -160,7 +189,7 @@ def _imessage_guard(domain: str, action: str, kwargs: dict) -> None:
 
 def _mail_guard(domain: str, action: str, kwargs: dict) -> None:
     if domain == "mail" and action == "delete" and not _called_recently("mail__read"):
-        raise PermissionError(
+        raise Refused(
             f"Refused: mail__delete requires mail__read within the last "
             f"{int(_GATE_WINDOW_S)}s. Call mail__read first, then retry."
         )
@@ -173,20 +202,18 @@ _PRECHECKS = (_imessage_guard, _mail_guard)
 def tool_called(domain: str, action: str, kwargs: dict):
     """Wrap one dispatcher call: pre-check gates, then log on exit.
 
-    Raises PermissionError (and logs blocked=1) if a pre-check refuses the
+    Raises Refused (and logs blocked=1) if a pre-check refuses the
     call. Otherwise yields a single-key holder dict the caller must set
     holder["result"] on after calling the handler — that's how a later gate
     (e.g. imessage__send needing contacts__search to have found someone) gets
     to see the handler's return value, not just that it was called. Logs the
-    outcome and — only on success — records the call (with its `found`
-    quality flag) in the in-memory session list.
+    outcome, with its `found` quality flag on success; that row is what later
+    gates read.
     """
-    call_name = f"{domain}__{action}"
-
     for check in _PRECHECKS:
         try:
             check(domain, action, kwargs)
-        except PermissionError as exc:
+        except Refused as exc:
             _log_call(domain, action, kwargs, ok=False, error=str(exc),
                        duration_ms=0, blocked=True, reason=str(exc))
             raise
@@ -201,12 +228,10 @@ def tool_called(domain: str, action: str, kwargs: dict):
         yield holder
     except Exception as exc:
         error = str(exc)
-        blocked = isinstance(exc, PermissionError)
+        blocked = isinstance(exc, Refused)
         raise
     finally:
         duration_ms = int((time.monotonic() - start) * 1000)
+        found = _found(domain, action, kwargs, holder.get("result")) if error is None else None
         _log_call(domain, action, kwargs, ok=error is None, error=error, duration_ms=duration_ms,
-                  blocked=blocked, reason=error if blocked else None)
-        if error is None:
-            found = _found(domain, action, kwargs, holder.get("result"))
-            _SESSION_CALLS.append((call_name, time.monotonic(), found))
+                  blocked=blocked, reason=error if blocked else None, found=found)

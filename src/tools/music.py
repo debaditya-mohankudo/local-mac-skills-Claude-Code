@@ -118,7 +118,7 @@ def handle_list_playlists() -> str:
         end tell
         """
     result = run_osascript(script)
-    return result if result else "No playlists found."
+    return result if result else []
 
 
 def handle_play_playlist(name: str) -> str:
@@ -163,7 +163,7 @@ def handle_list_tracks(playlist: str) -> dict | str:
         """
     result = run_osascript(script)
     if not result:
-        return f"No tracks found in playlist: {playlist}"
+        return []
     lines = [l for l in result.split("\n") if l]
     tracks = []
     for i, line in enumerate(lines):

@@ -120,7 +120,7 @@ tell application "Mail"
 end tell
 """
     raw = _run_applescript(script)
-    return _parse_lines(raw, email) or "No emails found."
+    return _parse_lines(raw, email) or []
 
 
 def handle_search(query: str, folder: str = "", limit: int = 50, account: str = DEFAULT_ACCOUNT) -> dict:
@@ -151,7 +151,7 @@ tell application "Mail"
 end tell
 """
     raw = _run_applescript(script)
-    return _parse_lines(raw, email) or f"No emails found matching '{query}'."
+    return _parse_lines(raw, email) or []
 
 
 def handle_delete(message_ids: list[int], folder: str = "INBOX", account: str = DEFAULT_ACCOUNT) -> dict:
@@ -251,7 +251,7 @@ tell application "Mail"
 end tell
 """
     raw = _run_applescript(script)
-    return [{"mailbox": line, "account": email} for line in raw.splitlines() if line] or "No mailboxes found."
+    return [{"mailbox": line, "account": email} for line in raw.splitlines() if line]
 
 
 def handle_list_drafts(limit: int = 20, account: str = DEFAULT_ACCOUNT) -> dict:
@@ -287,7 +287,7 @@ tell application "Mail"
 end tell
 """
     raw = _run_applescript(script)
-    return _parse_lines(raw, email) or "No drafts found."
+    return _parse_lines(raw, email) or []
 
 
 def handle_get(message_id: int, account: str = DEFAULT_ACCOUNT) -> dict:

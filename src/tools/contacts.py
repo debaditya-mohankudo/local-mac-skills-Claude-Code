@@ -58,4 +58,4 @@ def handle_search(name: str, include_email: bool = False) -> str:
                 f"cannot be searched. Open Contacts.app and retry. ({retry_exc})"
             ) from retry_exc
 
-    return result if result else f"No contacts found matching '{name}'."
+    return result if result else []
