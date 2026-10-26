@@ -12,7 +12,6 @@ from pathlib import Path
 
 import numpy as np
 import turbovec
-from llama_index.embeddings.ollama import OllamaEmbedding
 
 from config import config as cfg
 from tools.rag_core import load_index as _rag_load, save_index as _rag_save, query_index as _rag_query
@@ -160,7 +159,11 @@ _META_PATH = cfg.vault_rag_tvim.with_suffix(".meta.json")
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
-def _get_embed_model() -> OllamaEmbedding:
+def _get_embed_model():
+    # Imported here, not at module top: llama_index costs about 1.2s to import and
+    # only the embedding paths need it. fts_vault and the other sqlite-only
+    # handlers stay fast when each `mac vault_rag` call is its own process.
+    from llama_index.embeddings.ollama import OllamaEmbedding
     return OllamaEmbedding(model_name=EMBED_MODEL_NAME)
 
 
