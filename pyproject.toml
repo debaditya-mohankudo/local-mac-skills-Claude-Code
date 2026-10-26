@@ -6,7 +6,6 @@ requires-python = ">=3.10"
 dependencies = [
     # src/dispatcher.py uses mcp.server.fastmcp.FastMCP, which mcp 2.x removed.
     "mcp>=1.0.0,<2",
-    "fastmcp>=0.1.0",
     "python-dotenv>=1.0.0",
     "pyswisseph>=2.10.0",
     "pydantic-settings>=2.13.1",
