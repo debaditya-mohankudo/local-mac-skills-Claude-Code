@@ -118,7 +118,7 @@ package ToolCallGatesPackage {
     satisfy requirement EveryCallIsLogged by ToolCallGates;
 
     @ModelProvenance {
-        derivedFromCommit = "de1538d33683d3962b4dda67779e4068ba431ce3";
+        derivedFromCommit = "babd2f8ee9da3d7c751de3702d56b089db8a58ae";
         derivedAt = "2026-10-26";
         modelledPaths = (
             "src/tool_hooks.py",
