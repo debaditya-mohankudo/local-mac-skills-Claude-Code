@@ -4,7 +4,7 @@ package ToolCallGatesPackage {
 
     doc
     /*
-     * The pre-check "gate" mechanism that runs inside Dispatcher's _wrap
+     * The pre-check "gate" mechanism that runs inside Dispatcher's invoke
      * choke point before a domain handler executes, plus the call-outcome
      * logging that runs after. Source: src/tool_hooks.py.
      */
@@ -12,11 +12,11 @@ package ToolCallGatesPackage {
     part def ToolCallGates {
         doc
         /*
-         * Owns the ordered precheck list and the in-memory session-call
-         * record every guard reads from. Invoked once per domain__action
-         * call via tool_called(domain, action, kwargs) as a context
-         * manager; a failed precheck raises PermissionError before the
-         * wrapped handler ever runs.
+         * Owns the ordered precheck list; every guard reads the persisted
+         * SessionCallLog. Invoked once per domain__action call via
+         * tool_called(domain, action, kwargs) as a context manager; a
+         * failed precheck raises Refused (a PermissionError subclass)
+         * before the wrapped handler ever runs.
          * Source: src/tool_hooks.py:tool_called, _PRECHECKS.
          */
         attribute gateWindowSeconds : Integer = 120;
@@ -32,13 +32,13 @@ package ToolCallGatesPackage {
          * Not a precheck: containment lives where vault paths are built, so
          * no vault or vault_rag handler can build one without it. Every
          * caller argument naming a note or folder goes through _vault_path
-         * or _vault_dir, which raise PermissionError unless the resolved
+         * or _vault_dir, which raise Refused unless the resolved
          * path (absolute, `..` and symlinked folders included) stays under
          * the resolved VAULT_PATH. tool_called logs that refusal as
          * blocked=1 like a precheck refusal. Nothing enforces that a new
          * handler uses the helpers instead of joining onto VAULT_PATH itself.
          * Source: src/tools/vault.py:_inside_vault, _vault_path, _vault_dir;
-         * src/tool_hooks.py:tool_called.
+         * src/tool_hooks.py:tool_called, Refused.
          */
     }
 
@@ -48,7 +48,7 @@ package ToolCallGatesPackage {
          * Blocks imessage__send unless contacts__search ran within the
          * last gateWindowSeconds AND that search's own recorded "found"
          * flag (from SessionCallLog) is True — a stale or empty-result
-         * search still blocks the send.
+         * search (contacts__search returned []) still blocks the send.
          * Source: src/tool_hooks.py:_imessage_guard, _last_found.
          */
     }
@@ -66,24 +66,27 @@ package ToolCallGatesPackage {
     part def SessionCallLog {
         doc
         /*
-         * In-memory, per-server-process FIFO (maxlen 100) of
-         * (call_name, monotonic_ts, found) for every successful call this
-         * process has made. Guards query it via _called_recently /
-         * _last_found. Reset on MCP server restart — this is deliberately
-         * NOT the same as mcp_tool_calls in tool_hints.sqlite, which
-         * persists indefinitely and is written to regardless of outcome.
-         * Source: src/tool_hooks.py:_SESSION_CALLS, _FOUND_CHECKS.
+         * The mcp_tool_calls table in tool_hints.sqlite, read by the guards
+         * via _recent_call (through _called_recently / _last_found): the
+         * most recent row for the prerequisite with ok=1 and blocked=0
+         * whose ts is within gateWindowSeconds. Its nullable `found`
+         * column holds the result-quality flag from _FOUND_CHECKS. Being
+         * persisted, it is shared by every process that logs calls — the
+         * MCP server and each `mac` CLI invocation — so a prerequisite met
+         * in one process satisfies a gate in another. A failed read counts
+         * as no prerequisite, so the guards fail closed.
+         * Source: src/tool_hooks.py:_recent_call, _ensure_schema, _FOUND_CHECKS.
          */
     }
 
     requirement def GateBlocksBeforeHandlerRuns {
         doc
         /*
-         * A precheck failure must raise PermissionError before the
-         * wrapped handler executes, and must be logged with blocked=1 —
-         * the handler must never run on a blocked call. A PermissionError
-         * the handler raises itself (VaultPathContainment) is also logged
-         * with blocked=1.
+         * A precheck failure must raise Refused before the wrapped handler
+         * executes, and must be logged with blocked=1 — the handler must
+         * never run on a blocked call. A Refused the handler raises itself
+         * (VaultPathContainment) is also logged with blocked=1. A plain
+         * PermissionError from the OS is logged as an ordinary error.
          * Source: src/tool_hooks.py:tool_called (for check in _PRECHECKS
          * loop, raised before `yield holder`).
          */
@@ -106,16 +109,17 @@ package ToolCallGatesPackage {
         /*
          * Every domain__action call — blocked, failed, or successful — is
          * recorded to tool_hints.sqlite's mcp_tool_calls table with
-         * ok/error/blocked/reason/duration_ms, independent of the
-         * in-memory SessionCallLog which only records successful calls.
+         * ok/error/blocked/reason/duration_ms/found. That same table is the
+         * SessionCallLog the guards read, which consider only successful,
+         * unblocked rows.
          * Source: src/tool_hooks.py:_log_call, tool_called (finally block).
          */
     }
     satisfy requirement EveryCallIsLogged by ToolCallGates;
 
     @ModelProvenance {
-        derivedFromCommit = "080409c1511708d98cabc569a64303356be84fe6";
-        derivedAt = "2026-10-19";
+        derivedFromCommit = "de1538d33683d3962b4dda67779e4068ba431ce3";
+        derivedAt = "2026-10-26";
         modelledPaths = (
             "src/tool_hooks.py",
             "src/tools/vault.py"

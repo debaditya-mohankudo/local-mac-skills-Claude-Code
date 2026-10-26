@@ -14,11 +14,13 @@ package LocalMacRequirements {
         doc
         /*
          * Every domain__action MCP tool, for every domain in DOMAIN_MAP,
-         * is registered via _wrap — there is no direct mcp.tool()
-         * registration path that bypasses it. This is what makes
+         * is registered via _wrap, and every sync call runs through
+         * invoke — there is no direct mcp.tool() registration path that
+         * bypasses it. The `mac` CLI calls handlers through the same
+         * invoke. This is what makes
          * ToolCallGates a true choke point rather than an opt-in check
          * some handlers happen to call.
-         * Source: src/dispatcher.py:build_dispatcher, _wrap.
+         * Source: src/dispatcher.py:build_dispatcher, _wrap, invoke.
          */
     }
     satisfy requirement AllToolCallsFunnelThroughOneChokePoint by Dispatcher;
@@ -31,9 +33,9 @@ package LocalMacRequirements {
          * context manager exits, so gates that need to inspect the
          * previous call's result (e.g. IMessageRecipientGuard reading
          * whether contacts__search actually found someone) can do so via
-         * SessionCallLog's "found" flag, not just whether the call
-         * happened.
-         * Source: src/dispatcher.py:_wrap, src/tool_hooks.py:_found.
+         * SessionCallLog's persisted "found" flag, not just whether the
+         * call happened.
+         * Source: src/dispatcher.py:invoke, _wrap; src/tool_hooks.py:_found.
          */
     }
     satisfy requirement HandlerResultVisibleToLaterGateLogic by Dispatcher;
@@ -52,8 +54,8 @@ package LocalMacRequirements {
     satisfy requirement NoDomainLogicOutsideToolsPackage by Dispatcher;
 
     @ModelProvenance {
-        derivedFromCommit = "080409c1511708d98cabc569a64303356be84fe6";
-        derivedAt = "2026-10-19";
+        derivedFromCommit = "de1538d33683d3962b4dda67779e4068ba431ce3";
+        derivedAt = "2026-10-26";
         modelledPaths = (
             "src/dispatcher.py",
             "src/tool_hooks.py"
