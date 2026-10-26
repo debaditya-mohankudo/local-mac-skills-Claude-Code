@@ -9,12 +9,10 @@ Two unrelated subsystems, both ported from local-mac-tool/Sources/LocalMacMCP/:
    calendar via a `whose` query plus one Apple Event per candidate and hit
    the 120s timeout on market-watch before ever deleting.
 
-2. get_noise_summary — NOT Calendar.app at all. Ported from CalendarQueryTool.swift, which reads a separate
-   market-intelligence SQLite DB (~/Documents/claude_cache_data/market-intel/
-   market.sqlite, table `calendar`) for economic-event noise scoring
-   (gold/crude/nifty/usdinr/dxy). Grooming had assumed these three would be
-   Python aggregation over list_events — that assumption was wrong, caught
-   by reading the actual Swift source before implementing.
+2. get_noise_summary — ported from CalendarQueryTool.swift, which read a
+   separate market-intelligence SQLite DB (market.sqlite) for economic-event
+   noise scoring (gold/crude/nifty/usdinr/dxy). It now reads Calendar.app's
+   market-watch calendar; see below.
 
 Process isolation: the long-lived MCP server process repeatedly lost sight of
 the market-watch calendar (add_event "Calendar not found", list_events silently
@@ -25,17 +23,20 @@ and no EventKit state survives between calls. The `_do_*` functions are the
 in-process implementations and run only inside that child; the public
 `handle_*` functions keep their names, signatures and docstrings.
 
-Known condition: market.sqlite is a 0-byte file with no `calendar` table, so
-get_noise_summary fails with "no such table". get_events_by_date and
-get_upcoming_events originally read it too; they now read Calendar.app's
-"market-watch" calendar (via list_events) instead, since that is where
-market events actually live.
+market.sqlite is a 0-byte file with no `calendar` table. get_events_by_date,
+get_upcoming_events and get_noise_summary originally read it; they now read
+Calendar.app's "market-watch" calendar (via list_events) instead, since that is
+where market events actually live. Those events carry a "Type:" line but no
+asset list, so get_noise_summary maps the type to assets with _TYPE_ASSETS.
+
+add_event with no calendar uses the system default calendar for new events;
+delete_event with no calendar searches every writable calendar (the unique-match
+rule still applies). Both used to default to "Work", which may not exist.
 """
 from __future__ import annotations
 
 import json
 import subprocess
-import sqlite3
 import sys
 import time
 import traceback
@@ -52,7 +53,6 @@ _WORKER_TIMEOUT_S = 60
 # visible only after the TTL.
 _CACHE_TTL_S = 60
 _list_cache: dict[tuple, tuple[float, list[dict]]] = {}
-_MARKET_DB = Path.home() / "Documents" / "claude_cache_data" / "market-intel" / "market.sqlite"
 
 
 def _iso(d: str) -> str:
@@ -154,7 +154,7 @@ def _do_list_events(start_date: str, end_date: str, calendar: str = "") -> list[
     return _list_events_eventkit(_iso(start_date), _end_iso(end_date), calendar, store)
 
 
-def _do_add_event(title: str, start_date: str, calendar: str = "Work",
+def _do_add_event(title: str, start_date: str, calendar: str = "",
                   end_date: str = None, notes: str = None) -> str:
     if not title:
         raise ValueError("Missing required argument: title")
@@ -164,7 +164,12 @@ def _do_add_event(title: str, start_date: str, calendar: str = "Work",
     from datetime import timedelta
 
     store = _require_store()
-    cal = _one_calendar(store, calendar)
+    if calendar:
+        cal = _one_calendar(store, calendar)
+    else:
+        cal = store.defaultCalendarForNewEvents()
+        if cal is None:
+            raise ValueError("No default calendar for new events; pass calendar")
     start = _local_dt(_iso(start_date))
     end = _local_dt(_iso(end_date)) if end_date else start + timedelta(hours=1)
 
@@ -178,10 +183,10 @@ def _do_add_event(title: str, start_date: str, calendar: str = "Work",
     ok, err = store.saveEvent_span_commit_error_(event, EventKit.EKSpanThisEvent, True, None)
     if not ok:
         raise RuntimeError(f"EventKit save failed: {err}")
-    return f"Added '{title}' to {calendar} on {start.isoformat()}"
+    return f"Added '{title}' to {cal.title()} on {start.isoformat()}"
 
 
-def _do_delete_event(title: str, calendar: str = "Work", days: int = 30) -> str:
+def _do_delete_event(title: str, calendar: str = "", days: int = 30) -> str:
     if not title:
         raise ValueError("Missing required argument: title")
     if days < 1:
@@ -190,21 +195,26 @@ def _do_delete_event(title: str, calendar: str = "Work", days: int = 30) -> str:
     from datetime import datetime, timedelta
 
     store = _require_store()
-    cal = _one_calendar(store, calendar)
+    if calendar:
+        cals = [_one_calendar(store, calendar)]
+    else:
+        cals = [c for c in _calendars(store, "") if c.allowsContentModifications()]
     now = datetime.now()
-    matches = [e for e in _events(store, now - timedelta(days=days), now + timedelta(days=days), [cal])
+    matches = [e for e in _events(store, now - timedelta(days=days), now + timedelta(days=days), cals)
                if title in (e.title() or "")]
+    where = calendar or "any writable calendar"
     if not matches:
-        raise ValueError(f"No events found matching '{title}' in {calendar} within ±{days} days.")
+        raise ValueError(f"No events found matching '{title}' in {where} within ±{days} days.")
     if len(matches) > 1:
         names = ", ".join(e.title() for e in matches)
         raise ValueError(f"Multiple events match '{title}': {names}. Please be more specific.")
     event = matches[0]
     name = event.title()
+    cal_name = event.calendar().title()
     ok, err = store.removeEvent_span_commit_error_(event, EventKit.EKSpanThisEvent, True, None)
     if not ok:
         raise RuntimeError(f"EventKit remove failed: {err}")
-    return f"Deleted '{name}' from {calendar}."
+    return f"Deleted '{name}' from {cal_name}."
 
 
 # --- Process isolation: every EventKit call runs in a fresh child process ---
@@ -266,7 +276,7 @@ def handle_list_events(start_date: str, end_date: str, calendar: str = "") -> li
     return events
 
 
-def handle_add_event(title: str, start_date: str, calendar: str = "Work",
+def handle_add_event(title: str, start_date: str, calendar: str = "",
                      end_date: str = None, notes: str = None) -> str:
     """Add a calendar event."""
     _list_cache.clear()  # cleared before and after: a failed write may still have changed the store
@@ -277,7 +287,7 @@ def handle_add_event(title: str, start_date: str, calendar: str = "Work",
         _list_cache.clear()
 
 
-def handle_delete_event(title: str, calendar: str = "Work", days: int = 30) -> str:
+def handle_delete_event(title: str, calendar: str = "", days: int = 30) -> str:
     """Delete a calendar event by title (must be a unique match within ±days of now, default 30)."""
     _list_cache.clear()
     try:
@@ -286,44 +296,7 @@ def handle_delete_event(title: str, calendar: str = "Work", days: int = 30) -> s
         _list_cache.clear()
 
 
-# --- Market-intel calendar (separate SQLite DB, nothing to do with Calendar.app) ---
-
-def _query_events_by_date(date_str: str) -> list[dict]:
-    if not _MARKET_DB.exists():
-        raise FileNotFoundError(f"Database not found at {_MARKET_DB}")
-    con = sqlite3.connect(f"file:{_MARKET_DB}?mode=ro", uri=True)
-    try:
-        rows = con.execute(
-            """
-            SELECT date, event_type, label, noise_level, noise_assets, notes, reference_month, confirmed
-            FROM calendar
-            WHERE date = ?
-            ORDER BY CASE noise_level WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END
-            """,
-            (date_str,),
-        ).fetchall()
-    finally:
-        con.close()
-    return _rows_to_events(rows)
-
-
-def _rows_to_events(rows) -> list[dict]:
-    import json
-    events = []
-    for date, event_type, label, noise_level, noise_assets_str, notes, reference_month, confirmed in rows:
-        noise_assets = json.loads(noise_assets_str) if noise_assets_str else []
-        events.append({
-            "date": date,
-            "event_type": event_type,
-            "label": label,
-            "noise_level": noise_level,
-            "noise_assets": noise_assets,
-            "notes": notes,
-            "reference_month": reference_month,
-            "confirmed": bool(confirmed),
-        })
-    return events
-
+# --- Market-watch calendar (Calendar.app) ---
 
 _NOISE_RANK = {"high": 0, "medium": 1, "low": 2}
 
@@ -359,11 +332,29 @@ def handle_get_upcoming_events(days_ahead: int = 7, from_date: str = "") -> list
     return _market_watch_events(start.isoformat(), (start + timedelta(days=days_ahead)).isoformat())
 
 
+# Which assets each market-watch event type moves. Types not listed (and
+# events with no Type line) count toward events_count but flag no asset.
+_US_MACRO = ["gold", "dxy", "usdinr"]
+_TYPE_ASSETS = {
+    "us_adp": _US_MACRO, "us_nfp": _US_MACRO, "us_cpi": _US_MACRO,
+    "us_ppi": _US_MACRO, "fomc": _US_MACRO + ["nifty"],
+    "ecb_rate_decision": ["dxy", "gold"],
+    "india_cpi": ["nifty", "usdinr"], "india_wpi": ["nifty", "usdinr"],
+    "rbi_mpc": ["nifty", "usdinr"],
+    "nse_fo_weekly": ["nifty"], "nse_fo_monthly": ["nifty"], "nse_holiday": ["nifty"],
+    "mcx_gold": ["gold"], "shfe_gold": ["gold"], "comex_roll_start": ["gold"],
+    "comex_ltd": ["gold"], "lbma_holiday": ["gold"],
+    "mcx_crude": ["crude"],
+}
+
+
 def handle_get_noise_summary(date: str) -> dict:
-    """Get per-asset noise summary for a date from SQLite calendar."""
+    """Get per-asset noise summary (gold/crude/nifty/usdinr/dxy) for a date (YYYY-MM-DD) from the market-watch calendar."""
     if not date:
         raise ValueError("Missing required argument: date (YYYY-MM-DD)")
-    events = _query_events_by_date(date)
+    events = _market_watch_events(date, date)
+    for e in events:
+        e["noise_assets"] = _TYPE_ASSETS.get(e["event_type"], [])
     assets = ["gold", "crude", "nifty", "usdinr", "dxy"]
     noise_scores = {}
     for asset in assets:

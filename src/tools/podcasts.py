@@ -6,6 +6,9 @@ local-mac-tool/Sources/LocalMacMCP/PodcastsTool.swift — pure sqlite3 read
 against Podcasts.app's local library DB, no AppleScript involved at all
 (same as Swift's own implementation; grooming's speculation about needing
 an AppleScript-dictionary fallback was moot, the Swift tool never used one).
+
+Duration and audio URL are not on ZMTEPISODE in current Podcasts.app schemas;
+they live on ZMTMEDIAENCLOSURE, joined via ZMTEPISODE.ZCURRENTMEDIAENCLOSURE.
 """
 from __future__ import annotations
 
@@ -124,9 +127,10 @@ def handle_episodes(podcast_title: str = "", podcast_uuid: str = "", limit: int 
         unplayed_filter = "AND e.ZHASBEENPLAYED = 0 AND e.ZMARKASPLAYED = 0" if unplayed else ""
         rows = con.execute(
             f"""
-            SELECT e.ZTITLE, e.ZDURATION, e.ZPLAYHEAD, e.ZHASBEENPLAYED,
-                   e.ZISNEW, e.ZSAVED, e.ZPUBDATE, e.ZUUID, e.ZENCLOSUREURL
+            SELECT e.ZTITLE, m.ZDURATION, e.ZPLAYHEAD, e.ZHASBEENPLAYED,
+                   e.ZISNEW, e.ZSAVED, e.ZPUBDATE, e.ZUUID, m.ZREMOTEURL AS ZENCLOSUREURL
             FROM ZMTEPISODE e
+            LEFT JOIN ZMTMEDIAENCLOSURE m ON m.Z_PK = e.ZCURRENTMEDIAENCLOSURE
             WHERE e.ZPODCASTUUID = ?
             AND e.ZISHIDDEN = 0
             {unplayed_filter}
@@ -148,11 +152,12 @@ def handle_recent(limit: int = 20, new_only: bool = False) -> list:
     try:
         rows = con.execute(
             f"""
-            SELECT e.ZTITLE, e.ZDURATION, e.ZPLAYHEAD, e.ZHASBEENPLAYED,
+            SELECT e.ZTITLE, m.ZDURATION, e.ZPLAYHEAD, e.ZHASBEENPLAYED,
                    e.ZISNEW, e.ZSAVED, e.ZPUBDATE, e.ZUUID,
                    p.ZTITLE as podcast_title
             FROM ZMTEPISODE e
             LEFT JOIN ZMTPODCAST p ON e.ZPODCASTUUID = p.ZUUID
+            LEFT JOIN ZMTMEDIAENCLOSURE m ON m.Z_PK = e.ZCURRENTMEDIAENCLOSURE
             WHERE e.ZISHIDDEN = 0
             {new_filter}
             ORDER BY e.ZPUBDATE DESC
@@ -179,11 +184,12 @@ def handle_in_progress() -> list:
     try:
         rows = con.execute(
             """
-            SELECT e.ZTITLE, e.ZDURATION, e.ZPLAYHEAD, e.ZHASBEENPLAYED,
+            SELECT e.ZTITLE, m.ZDURATION, e.ZPLAYHEAD, e.ZHASBEENPLAYED,
                    e.ZISNEW, e.ZSAVED, e.ZPUBDATE, e.ZUUID,
                    p.ZTITLE as podcast_title
             FROM ZMTEPISODE e
             LEFT JOIN ZMTPODCAST p ON e.ZPODCASTUUID = p.ZUUID
+            LEFT JOIN ZMTMEDIAENCLOSURE m ON m.Z_PK = e.ZCURRENTMEDIAENCLOSURE
             WHERE e.ZISHIDDEN = 0
             AND e.ZPLAYHEAD > 0
             AND e.ZHASBEENPLAYED = 0

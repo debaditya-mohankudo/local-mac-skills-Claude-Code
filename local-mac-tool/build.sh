@@ -10,7 +10,8 @@ GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 
 swift build -c release "$@"
 
-BINARY=".build/arm64-apple-macosx/release/LocalMacMCP"
+# Ask swift where it put the binary; the folder layout changes between toolchains.
+BINARY="$(swift build -c release "$@" --show-bin-path)/LocalMacMCP"
 DEST="$HOME/bin/local-mac-tool"
 
 cp "$BINARY" "$DEST"

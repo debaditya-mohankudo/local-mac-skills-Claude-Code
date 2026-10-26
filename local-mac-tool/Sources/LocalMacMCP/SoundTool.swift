@@ -58,7 +58,7 @@ enum SoundTool {
     static func getVolume(payload: [String: Any]) async throws -> Any {
         let vol = try getSystemVolume()
         let muted = try getSystemMute()
-        return ["volume": Int(vol * 100), "muted": muted]
+        return ["volume": percent(vol), "muted": muted]
     }
 
     static func setVolume(payload: [String: Any]) async throws -> Any {
@@ -70,7 +70,13 @@ enum SoundTool {
         }
         let scalar = Float(level) / 100.0
         try setSystemVolume(scalar)
-        return ["ok": true, "volume": level]
+        // Report what the device actually took, which can differ from the request.
+        return ["ok": true, "volume": percent(try getSystemVolume())]
+    }
+
+    // Round, not truncate: the device stores e.g. 0.8099 for 81, which Int() reads as 80.
+    private static func percent(_ scalar: Float) -> Int {
+        Int((scalar * 100).rounded())
     }
 
     // MARK: - Mute / Unmute

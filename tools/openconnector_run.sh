@@ -23,6 +23,10 @@ ADMIN_TOKEN=$(security find-generic-password -a "$USER" -s "openconnector-admin-
 }
 
 mkdir -p "$DATA_DIR"
+# iCloud evicts idle files to the cloud ("dataless"). The container cannot trigger
+# the download, so SQLite inside it fails with "disk I/O error". Reading each file
+# on the host pulls it back down first.
+find "$DATA_DIR" -type f -exec cat {} + >/dev/null
 
 # container's stop/start can race and leave the container unrecoverable (see task e5ea4b88) —
 # always tear down and run fresh rather than trying to `container start` a stopped one.
