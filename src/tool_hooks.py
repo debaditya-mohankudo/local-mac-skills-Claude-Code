@@ -37,11 +37,13 @@ class Refused(PermissionError):
     vault path outside the vault). Logged as blocked. A plain PermissionError
     from the OS (e.g. a macOS privacy denial) is an ordinary error, not this."""
 
-# Args that may carry personal data — logged as a prefix + length, never
-# verbatim, per this repo's privacy rules.
+# Args that may carry personal data. A value longer than _TRUNCATE_LEN is
+# logged as a prefix + length; a shorter one is logged as is (task:593321f0).
+# Each key must be a parameter of that handler, or redaction silently never
+# matches — tests/test_tool_hooks_redact.py checks this.
 _TRUNCATE_KEYS: dict[tuple[str, str], list[str]] = {
     ("mail", "compose"): ["body"],
-    ("imessage", "send"): ["text"],
+    ("imessage", "send"): ["message"],
     ("vault", "write"): ["content"],
     ("vault", "append"): ["content"],
 }
