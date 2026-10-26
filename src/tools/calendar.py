@@ -42,6 +42,12 @@ import time
 import traceback
 from pathlib import Path
 
+if __name__ != "__main__":
+    # Only the handler signatures use these, evaluated by FastMCP / gen_groups in the
+    # importing process. The EventKit worker (_run_isolated runs this module as
+    # __main__) never reads them, and skips pydantic's ~60ms import per spawn.
+    from .arg_types import IsoDate, IsoDateTime  # noqa: F401
+
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _WORKER_TIMEOUT_S = 60
@@ -264,7 +270,7 @@ def _worker_main(argv: list[str]) -> int:
     return 0
 
 
-def handle_list_events(start_date: str, end_date: str, calendar: str = "") -> list[dict]:
+def handle_list_events(start_date: IsoDateTime, end_date: IsoDateTime, calendar: str = "") -> list[dict]:
     """List calendar events overlapping [start_date, end_date] (YYYY-MM-DD or full ISO-8601; a bare end date covers that whole day). Pass calendar (title or identifier, e.g. "market-watch") to query one calendar. Recurring events are expanded. Returns events sorted by start, with local ISO start/end."""
     key = (start_date, end_date, calendar)
     hit = _list_cache.get(key)
@@ -276,8 +282,8 @@ def handle_list_events(start_date: str, end_date: str, calendar: str = "") -> li
     return events
 
 
-def handle_add_event(title: str, start_date: str, calendar: str = "",
-                     end_date: str = None, notes: str = None) -> str:
+def handle_add_event(title: str, start_date: IsoDateTime, calendar: str = "",
+                     end_date: IsoDateTime | None = None, notes: str = None) -> str:
     """Add a calendar event."""
     _list_cache.clear()  # cleared before and after: a failed write may still have changed the store
     try:
@@ -318,14 +324,14 @@ def _market_watch_events(start: str, end: str) -> list[dict]:
     return events
 
 
-def handle_get_events_by_date(date: str) -> list[dict]:
+def handle_get_events_by_date(date: IsoDate) -> list[dict]:
     """Get market-watch calendar events (Calendar.app) on a specific date (YYYY-MM-DD), high-noise first."""
     if not date:
         raise ValueError("Missing required argument: date (YYYY-MM-DD)")
     return _market_watch_events(date, date)
 
 
-def handle_get_upcoming_events(days_ahead: int = 7, from_date: str = "") -> list[dict]:
+def handle_get_upcoming_events(days_ahead: int = 7, from_date: IsoDate = "") -> list[dict]:
     """Get market-watch calendar events (Calendar.app) from from_date (default today) through days_ahead days, by date then noise level. The 7-day ambient-context read."""
     from datetime import date, timedelta
     start = date.fromisoformat(from_date) if from_date else date.today()
@@ -348,7 +354,7 @@ _TYPE_ASSETS = {
 }
 
 
-def handle_get_noise_summary(date: str) -> dict:
+def handle_get_noise_summary(date: IsoDate) -> dict:
     """Get per-asset noise summary (gold/crude/nifty/usdinr/dxy) for a date (YYYY-MM-DD) from the market-watch calendar."""
     if not date:
         raise ValueError("Missing required argument: date (YYYY-MM-DD)")

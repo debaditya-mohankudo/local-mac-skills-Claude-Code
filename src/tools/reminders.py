@@ -29,6 +29,8 @@ from __future__ import annotations
 
 from local_process import run_osascript
 
+from .arg_types import IsoDateTime
+
 _FIELD_SEP = "ASCII character 31"  # unit separator
 _REC_SEP = "ASCII character 30"    # record separator
 
@@ -167,7 +169,7 @@ def handle_list(list: str = None, include_completed: bool = False) -> dict | str
     return {"reminders": entries}
 
 
-def handle_create(title: str, list: str = None, due_date: str = None, notes: str = None, recurrence: str = None) -> str:
+def handle_create(title: str, list: str = None, due_date: IsoDateTime | None = None, notes: str = None, recurrence: str = None) -> str:
     """Create a reminder. recurrence is NOT supported (AppleScript limitation) — accepted but ignored."""
     if not title:
         raise ValueError("Missing required argument: title")
@@ -217,7 +219,7 @@ def _act_on_reminder_script(reminder_id: str, action: str) -> str:
         '''
 
 
-def handle_update(id: str, title: str = None, due_date: str = None, notes: str = None) -> str:
+def handle_update(id: str, title: str = None, due_date: IsoDateTime | None = None, notes: str = None) -> str:
     """Edit a reminder in place by its identifier: any of title, due_date
     (ISO-8601), notes. Fields not passed are left unchanged. A due date can
     be moved but not removed -- Reminders' AppleScript rejects both
