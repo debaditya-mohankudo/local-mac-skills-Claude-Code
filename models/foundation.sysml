@@ -20,10 +20,10 @@ package Foundation {
     }
 
     @ModelProvenance {
-        derivedFromCommit = "a926de74408ce95dbe963cfdc13abd479bbf7c25";
-        derivedAt = "2026-08-07";
+        derivedFromCommit = "2cadbff8234728e4e7cc189a8662e48feefed9a1";
+        derivedAt = "2026-10-27";
         modelledPaths = (
-            "models/foundation.sysml"
+            "tests/test_model_provenance.py"
         );
     }
 }

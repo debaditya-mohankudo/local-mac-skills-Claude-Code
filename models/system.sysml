@@ -65,8 +65,8 @@ package LocalMacSystem {
     }
 
     @ModelProvenance {
-        derivedFromCommit = "de1538d33683d3962b4dda67779e4068ba431ce3";
-        derivedAt = "2026-10-26";
+        derivedFromCommit = "cc9d7840d9014ba0ad8e0d97a0152f0a69c1738d";
+        derivedAt = "2026-10-27";
         modelledPaths = (
             "mcp_server.py",
             "src/dispatcher.py"
