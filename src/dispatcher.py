@@ -85,7 +85,7 @@ DOMAIN_MAP = {
                                        "outline", "tags", "tasks", "stats", "section_search",
                                        "folder_search", "tags_search", "filename_search",
                                        "vault_keyword_hints"]),
-    "time":      ("tools.time_tools", ["now", "alarm", "wait", "play_sound"]),
+    "time":      ("tools.time_tools", ["now", "alarm", "wait", "cancel", "play_sound"]),
     # The astrology domains (panchang, planets, astrology, aq, gochar) moved to
     # a separate private repository. They read birth data for identifiable
     # people, which cannot live in a repository intended to be public.

@@ -34,6 +34,32 @@ def _schedule(notify_cmd: str, target: datetime) -> int:
     return _spawn_detached(f"while [ $(date +%s) -lt {epoch} ]; do sleep 5; done; {notify_cmd}")
 
 
+# How every _schedule timer reads in `ps -o command=`. A timer leads its own
+# process group, so pgid == pid is checked alongside this prefix.
+_TIMER_COMMAND = "sh -c while [ $(date +%s) -lt "
+
+
+def handle_cancel(pid: int) -> str:
+    """Cancel a wait/alarm timer by the pid it reported. Stops its whole process group."""
+    if pid <= 1:
+        raise ValueError(f"Not a timer: pid {pid}")
+    ps = subprocess.run(["/bin/ps", "-o", "pgid=,command=", "-p", str(pid)],
+                        capture_output=True, text=True, timeout=10)
+    fields = ps.stdout.split(None, 1)
+    if ps.returncode != 0 or len(fields) < 2:
+        return f"Timer {pid} already finished"
+    pgid, command = fields
+    if pgid != str(pid) or not command.startswith(_TIMER_COMMAND):
+        raise ValueError(f"Not a timer: pid {pid} is {command.strip()[:80]!r}")
+    import os
+    import signal
+    try:
+        os.killpg(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return f"Timer {pid} already finished"
+    return f"Timer {pid} cancelled"
+
+
 def handle_alarm(time: str, label: str = "Alarm", reminder: bool = False) -> str:
     """Set an alarm at HH:MM (24h). Optionally also creates an Apple Reminder."""
     if not time:
