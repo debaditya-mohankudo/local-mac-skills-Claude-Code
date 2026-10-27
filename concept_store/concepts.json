@@ -41,35 +41,69 @@
     "mcp-tool-call-gates": {
       "confidence": 0.8,
       "contracts": [
-        "Every domain__action MCP call funnels through dispatcher.py's _wrap, which invokes tool_hooks.tool_called(domain, action, kwargs) as a context manager -- no MCP tool handler runs outside this choke point.",
-        "Prechecks run in fixed order (_vault_guard, _imessage_guard, _mail_guard) before the handler executes; each is a no-op unless its own (domain, action) matches.",
-        "A failed precheck raises PermissionError, logs the call to tool_hints.sqlite's mcp_tool_calls table with blocked=1 and a reason, and the wrapped handler never runs.",
-        "On success, tool_called yields a holder dict; the caller must set holder['result'] after invoking the handler -- that's how a later gate (e.g. imessage__send needing contacts__search's own result) sees the return value, not just that the call happened.",
         "_FOUND_CHECKS maps (domain, action) to a function computing a bool 'found' quality flag from (kwargs, result); calls with no entry record found=None.",
-        "Successful calls are appended to the in-memory _SESSION_CALLS deque (maxlen 100) as (call_name, monotonic_ts, found); gates read this via _called_recently()/_last_found() to check prior calls within _GATE_WINDOW_S (120s)."
+        "Every sync domain__action call — MCP (_wrap) or `mac` CLI (cli-graph _backend.call) — runs through dispatcher.invoke, which wraps the handler in tool_hooks.tool_called(domain, action, kwargs).",
+        "Prechecks (_imessage_guard, _mail_guard) run before the handler; a failed precheck raises tool_hooks.Refused (a PermissionError subclass), logs blocked=1 with a reason, and the handler never runs.",
+        "A Refused raised by a handler itself (vault path containment in tools/vault.py:_inside_vault) is also logged blocked=1. A plain PermissionError (e.g. from the OS) is logged as an ordinary error, blocked=0.",
+        "On success the caller sets holder['result']; _FOUND_CHECKS turns it into a nullable `found` flag stored in mcp_tool_calls.found (contacts__search: found = bool(result), handlers return [] for no match).",
+        "Gates read mcp_tool_calls via _recent_call: the most recent row for the prerequisite with ok=1, blocked=0 and ts within _GATE_WINDOW_S (120s).",
+        "Arguments listed in _TRUNCATE_KEYS (mail compose body, imessage send message, vault write/append content) are logged to mcp_tool_calls.args_json as a _TRUNCATE_LEN (200) char prefix plus '... [N chars]' when longer than the cutoff; values at or under 200 chars are logged verbatim (task:593321f0)."
       ],
       "created_at": "2026-08-07T07:38:43.000000+00:00",
-      "description": "Host-agnostic pre/post hook mechanism around every MCP tool call, embedded in dispatcher.py's single choke point rather than relying on external Claude Code settings.json hooks (which only fire when that host's hook process is wired up). Runs pre-check 'gates' that can block a call outright, then logs every call's outcome to tool_hints.sqlite regardless of host.",
+      "description": "Host-agnostic pre/post hook mechanism around every local-mac tool call, run by dispatcher.invoke (used by the MCP tools' _wrap and by the `mac` CLI) rather than relying on external settings.json hooks. Runs pre-check gates that can block a call outright, then logs every call's outcome to tool_hints.sqlite; the gates read that same log.",
       "evidence": [
         "src/tool_hooks.py:_PRECHECKS",
         "src/tool_hooks.py:tool_called",
-        "src/tool_hooks.py:_vault_guard,_imessage_guard,_mail_guard",
-        "src/tool_hooks.py:_SESSION_CALLS,_GATE_WINDOW_S",
-        "README.md#Gates"
+        "src/tool_hooks.py:_imessage_guard,_mail_guard",
+        "src/tool_hooks.py:_GATE_WINDOW_S",
+        "README.md#Gates",
+        "src/tool_hooks.py:_recent_call",
+        "src/tool_hooks.py:Refused",
+        "src/tool_hooks.py:_ensure_schema",
+        "src/dispatcher.py:invoke",
+        "tests/test_tool_hooks_gates.py",
+        "src/tool_hooks.py:_TRUNCATE_KEYS",
+        "tests/test_tool_hooks_redact.py"
       ],
       "invariants": [
-        "The 120s gate window (_GATE_WINDOW_S) is defined and owned entirely within this repo's src/tool_hooks.py -- this repo does not depend on or mirror claude-hooks' gate_rules.yaml.",
-        "_SESSION_CALLS is in-memory and per-server-process; it resets on MCP server restart even though mcp_tool_calls in tool_hints.sqlite persists indefinitely, so 'called recently' is scoped to process uptime, not wall-clock/DB history.",
-        "vault__write/append/delete/move must resolve inside VAULT_PATH or _vault_guard raises PermissionError -- this is a hard containment check, not a warning.",
-        "imessage__send requires contacts__search within the last 120s AND that search's own result to have found a match (found is not None and not False) -- a stale or empty search still blocks the send.",
-        "mail__delete requires mail__read within the last 120s -- presence of the call is sufficient, no result-quality check is registered for mail__read."
+        "Gate state is the persisted mcp_tool_calls table, shared by every process that logs calls, so a prerequisite met in one process (MCP server or one `mac` invocation) satisfies a gate in another; it survives server restarts but only counts within 120s.",
+        "Gates fail closed: a failed log read, or a lost log write, counts as no prerequisite.",
+        "The 120s window is owned by this repo (_GATE_WINDOW_S); it does not mirror claude-hooks' gate_rules.yaml.",
+        "imessage__send requires a contacts__search within 120s whose found flag is True; mail__delete requires a mail__read within 120s (presence only).",
+        "Table schema (including the `found` column ALTER) is ensured once per process per DB path (_SCHEMA_READY).",
+        "Every _TRUNCATE_KEYS key must be a parameter of that (domain, action) handler, or redaction silently never matches; tests/test_tool_hooks_redact.py enforces this via dispatcher.resolve + inspect.signature."
       ],
-      "last_validated": "2026-08-07T07:41:53.000000+00:00",
+      "last_validated": "2026-10-26T11:01:51.575661+00:00",
       "module": "src/tool_hooks.py",
-      "name": "mcp-tool-call-gates"
+      "name": "mcp-tool-call-gates",
+      "related": []
+    },
+    "time-tools-timers": {
+      "confidence": 0.8,
+      "contracts": [
+        "handle_wait/handle_alarm return a message that includes the timer's pid; that pid is the handle handle_cancel takes.",
+        "handle_cancel(pid) sends SIGTERM to the whole process group of a live timer and returns 'Timer N cancelled'.",
+        "handle_cancel on a pid that no longer exists returns 'Timer N already finished' (success, so a cleanup that runs twice is harmless). A pid that never existed reads the same way.",
+        "handle_cancel raises ValueError ('Not a timer') for pid <= 1 or a live pid that is not a timer, and never signals it."
+      ],
+      "created_at": "2026-10-27T05:51:42.931877+00:00",
+      "description": "Clock, wait/alarm timers and sounds. wait and alarm schedule a notification by starting a detached `sh` polling loop that leads its own process group and report its pid. cancel stops that group by pid.",
+      "evidence": [
+        "src/tools/time_tools.py:handle_cancel",
+        "src/tools/time_tools.py:_schedule",
+        "tests/test_time_cancel.py"
+      ],
+      "invariants": [
+        "A timer is recognised by its shape: pgid == pid and `ps -o command=` starting with _TIMER_COMMAND. _TIMER_COMMAND must stay in step with the script _schedule builds, or cancel refuses every timer.",
+        "play_sound also uses _spawn_detached but reports no pid and is not cancellable."
+      ],
+      "last_validated": "2026-10-27T05:51:42.932223+00:00",
+      "module": "src/tools/time_tools.py",
+      "name": "time-tools-timers",
+      "related": []
     }
   },
   "meta": {
-    "updated_at": "2026-09-29T23:50:19.561333+00:00"
+    "updated_at": "2026-10-27T05:51:42.932297+00:00"
   }
 }
